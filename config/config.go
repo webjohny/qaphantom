@@ -14,7 +14,7 @@ type Configuration struct {
 	ApiSecret string
 }
 
-func GetItems() Configuration {
+func (conf *Configuration)GetItems() Configuration {
 	var filename = "./prod.json"
 	var config Configuration
 
@@ -28,8 +28,8 @@ func GetItems() Configuration {
 	return config
 }
 
-func Get(key string) string {
-	items := getItems
+func (conf *Configuration)Get(key string) string {
+	items := conf.GetItems()
 
-	return (*items)[key]
+	return items.ApiHost
 }

@@ -14,8 +14,12 @@ type Configuration struct {
 	ApiSecret string
 }
 
-func (conf *Configuration)GetItems() Configuration {
-	var filename = "./prod.json"
+func (conf *Configuration)Get(key string) string {
+	return conf.ApiHost
+}
+
+func Create() Configuration {
+	var filename = "./config/prod.json"
 	var config Configuration
 
 	configFile, err := os.Open(filename)
@@ -25,11 +29,6 @@ func (conf *Configuration)GetItems() Configuration {
 	}
 	jsonParser := json.NewDecoder(configFile)
 	jsonParser.Decode(&config)
+
 	return config
-}
-
-func (conf *Configuration)Get(key string) string {
-	items := conf.GetItems()
-
-	return items.ApiHost
 }

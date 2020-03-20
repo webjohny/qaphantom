@@ -57,10 +57,9 @@ func cmdTimer(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	conf := config.GetItems()
-	fmt.Println(conf)
+	conf := config.Create()
 
 	r := mux.NewRouter()
 	r.HandleFunc("/cmd-timer", cmdTimer).Methods("POST")
-	log.Fatal(http.ListenAndServe(":8000", r))
+	log.Fatal(http.ListenAndServe(":" + string(conf.Port), r))
 }

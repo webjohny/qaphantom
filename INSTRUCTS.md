@@ -1,0 +1,1 @@
+go run php.go --path="/path/to.php.script.php"

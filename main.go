@@ -14,18 +14,6 @@ import (
 )
 
 func cmdTimer(w http.ResponseWriter, r *http.Request) {
-
-	fmt.Fprintf(w, "%s %s %s \n", r.Method, r.URL, r.Proto)
-	//Iterate over all header fields
-	for k, v := range r.Header {
-		fmt.Fprintf(w, "Header field %q, Value %q\n", k, v)
-	}
-
-	fmt.Fprintf(w, "Host = %q\n", r.Host)
-	fmt.Fprintf(w, "RemoteAddr= %q\n", r.RemoteAddr)
-	//Get value for a specified token
-	fmt.Fprintf(w, "\n\nFinding value of \"Accept\" %q", r.Header["Accept"])
-
 	w.Header().Set("Content-Type", "application/json")
 
 	commandExec := r.FormValue("cmd")
@@ -61,5 +49,5 @@ func main() {
 
 	r := mux.NewRouter()
 	r.HandleFunc("/cmd-timer", cmdTimer).Methods("POST")
-	log.Fatal(http.ListenAndServe(":" + string(conf.Port), r))
+	log.Fatal(http.ListenAndServe(":" + strconv.Itoa(conf.Port), r))
 }

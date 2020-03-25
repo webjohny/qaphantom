@@ -3,5 +3,7 @@
   "ApiHost": "http://81.200.119.73/",
   "ApiLink": "http://81.200.119.73/api",
   "ApiKey": "go-go-dance2020",
-  "ApiSecret": "ogvuGF*&t0g8yjnnds$Y43"
+  "ApiSecret": "ogvuGF*&t0g8yjnnds$Y43",
+  "MongoUrl": "127.0.0.1:27017",
+  "MongoDb": "phantom"
 }

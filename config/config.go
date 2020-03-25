@@ -12,6 +12,8 @@ type Configuration struct {
 	ApiLink   string
 	ApiKey    string
 	ApiSecret string
+	MongoUrl  string
+	MongoDb   string
 }
 
 func (conf *Configuration)Get(key string) string {

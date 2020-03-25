@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
+	"reflect"
 	"time"
 )
 
@@ -19,7 +20,7 @@ type Question struct {
 	CatId int
 	TryCount int
 	ErrorsCount int
-	Status bool
+	Status int
 	Error string
 	ParserId int
 	Timeout time.Time
@@ -38,35 +39,11 @@ func main() {
 	// Create client
 	CreateConnection()
 
-	coll := mongoDb.Collection("questions")
-	result, _ := coll.InsertOne(
-		context.Background(),
-		bson.D{
-			{"Error", "Without error"},
-			{"Log", "First operation"},
-			{"LogLast", "Last operation"},
-			{"SiteId", 100},
-			{"CatId", 100},
-			{"TryCount", 100},
-			{"ErrorsCount", 100},
-			{"Status", true},
-			{"ParserId", 100},
-			{"Keyword", "simple keyword"},
-			{"FastA", "fast a link"},
-			{"FastLink", "https://www.mongodb.com/blog/post/mongodb-go-driver-tutorial"},
-			{"FastLinkTitle", "fast link title"},
-			{"Timeout", time.Now()},
-			{"FastDate", time.Now()},
-		})
-
-	fmt.Println(result)
-
-	var item Question
-	err := coll.FindOne(context.TODO(), bson.D{}).Decode(&item)
-	if err != nil {
-		log.Fatal(err)
+	results := GetQuestions(1, 1)
+	if ! reflect.DeepEqual(results, Question{}) {
+		fmt.Println(results)
+		//results
 	}
-	fmt.Println(item)
 	//var result Trainer
 
 	//result, err := collection.Find(context.TODO(), bson.D{})
@@ -119,24 +96,60 @@ func Disconnect() {
 	fmt.Println("Connection to MongoDB closed.")
 }
 
-func GetQuestions(limit, offset, lastId int) {
+func GetQuestions(limit int64, offset int64) []Question {
 	coll := mongoDb.Collection("questions")
 
-	var item Question
-	err := coll.FindOne(context.TODO(), bson.D{}).Decode(&item)
-	if err != nil {
+	//find records
+	//pass these options to the Find method
+	findOptions := options.Find()
+	//Set the limit of the number of record to find
+	if limit != 0 {
+		findOptions.SetLimit(limit)
+	}
+	if offset != 0 {
+		findOptions.SetSkip(offset)
+	}
+	//Define an array in which you can store the decoded documents
+	var results []Question
+
+	//Passing the bson.D{{}} as the filter matches  documents in the collection
+	cur, err := coll.Find(context.TODO(), bson.D{{}}, findOptions)
+	if err !=nil {
+		log.Fatal(err)
+	}
+	//Finding multiple documents returns a cursor
+	//Iterate through the cursor allows us to decode documents one at a time
+
+	for cur.Next(context.TODO()) {
+		//Create a value into which the single document can be decoded
+		var elem Question
+		err := cur.Decode(&elem)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		results = append(results, elem)
+
+	}
+
+	if err := cur.Err(); err != nil {
 		log.Fatal(err)
 	}
 
+	//Close the cursor once finished
+	cur.Close(context.TODO())
 
+	return results
 }
 
-func SetQuestions(question *Question, id int) {
+func SetQuestions(question Question, id int) *mongo.InsertOneResult {
 	coll := mongoDb.Collection("questions")
+
 	result, _ := coll.InsertOne(
 		context.Background(),
 		question)
-	fmt.Println(result)
+
+	return result
 }
 
 func CheckQuestionByKeyword(keyword map[string]interface{}) {

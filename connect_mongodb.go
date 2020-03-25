@@ -120,5 +120,29 @@ func Disconnect() {
 }
 
 func GetQuestions(limit, offset, lastId int) {
+	coll := mongoDb.Collection("questions")
+
+	var item Question
+	err := coll.FindOne(context.TODO(), bson.D{}).Decode(&item)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+
+}
+
+func SetQuestions(question *Question, id int) {
+	coll := mongoDb.Collection("questions")
+	result, _ := coll.InsertOne(
+		context.Background(),
+		question)
+	fmt.Println(result)
+}
+
+func CheckQuestionByKeyword(keyword map[string]interface{}) {
+
+}
+
+func CheckQuestionsByKeywords(keywords map[string]interface{}) {
 
 }

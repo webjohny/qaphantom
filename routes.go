@@ -14,7 +14,13 @@ import (
 )
 
 type Routes struct {
-	conf config.Configuration
+	conf *config.Configuration
+	mongo MongoConn
+}
+
+type StatusResponse struct {
+	status bool
+	msg string
 }
 
 func (th *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
@@ -22,8 +28,8 @@ func (th *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 
 	commandExec := r.FormValue("cmd")
 
-	result := map[string]interface{}{
-		"status": true,
+	result := StatusResponse{
+		status: true,
 	}
 
 	var limit int64 = 1000
@@ -40,12 +46,15 @@ func (th *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// This will fail after 100 milliseconds. The 5 second sleep
 		// will be interrupted.
-		result["status"] = false
+		result.status = false
 		fmt.Println(err)
 	}
 	fmt.Println(string(out))
 
-	json.NewEncoder(w).Encode(result)
+	err = json.NewEncoder(w).Encode(result)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func (th *Routes) CheckQuestion(w http.ResponseWriter, r *http.Request) {
@@ -56,17 +65,30 @@ func (th *Routes) CheckQuestions(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func runAPIRoutes() {
-	conf := config.Create()
+func (th *Routes) UpdateQuestion(w http.ResponseWriter, r *http.Request) {
+	id := r.FormValue("id")
+	data := r.FormValue("data")
+	fmt.Println(id)
+	fmt.Println(data)
 
+	//th.mongo.UpdateQuestion(bson.M{}, id)
+}
+
+func (th *Routes) InsertQuestion(w http.ResponseWriter, r *http.Request) {
+
+}
+
+func (th *Routes) Run() {
 	routes := Routes{
-		conf: conf,
+		conf: th.conf,
 	}
 	r := mux.NewRouter()
 
 	r.HandleFunc("/cmd-timer", routes.CmdTimer).Methods("POST")
 	r.HandleFunc("/check/question", routes.CheckQuestion).Methods("POST")
 	r.HandleFunc("/check/questions", routes.CheckQuestions).Methods("POST")
+	r.HandleFunc("/update/question", routes.UpdateQuestion).Methods("POST")
+	r.HandleFunc("/insert/question", routes.InsertQuestion).Methods("POST")
 
-	log.Fatal(http.ListenAndServe(":" + strconv.Itoa(conf.Port), r))
+	log.Fatal(http.ListenAndServe(":" + strconv.Itoa(th.conf.Port), r))
 }

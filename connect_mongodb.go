@@ -31,74 +31,40 @@ type Question struct {
 	FastDate time.Time
 }
 
-var mongoClient mongo.Client
-var mongoDb *mongo.Database
-
-func main() {
-	// Rest of the code will go here
-	// Create client
-	CreateConnection()
-
-	//SetQuestions(bson.M{
-	//	"LogLast": "Test Last Log 2",
-	//}, "5e7b9dbb2d7a869cde7b35c4")
-
-	//result := CheckQuestionByKeyword("simple keyword 532", 100)
-	//fmt.Println(result)
-
-	//results := CheckQuestionsByKeywords([]string{"simple keyword 5832", "simple keyword 4096", "simple keyword 3375"}, 100)
-	//fmt.Println(results)
-
-
-	//results := GetQuestions(1, 1)
-	//if ! reflect.DeepEqual(results, Question{}) {
-	//	fmt.Println(results)
-	//	//results
-	//}
-
-	//result, err := collection.Find(context.TODO(), bson.D{})
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//fmt.Printf("Found a single document: %+v\n", result)
-
-	//err := collection.FindOne(context.TODO(), bson.D{}).Decode(&result)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//fmt.Println(result.Name)
-
-	Disconnect()
+type MongoConn struct {
+	client *mongo.Client
+	db *mongo.Database
+	conf *config.Configuration
 }
 
-func CreateConnection() {
-	conf := config.Create()
+func (m *MongoConn) CreateConnection() {
+	m.conf = config.Create()
 
-	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://" + conf.MongoUrl))
+	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://" + m.conf.MongoUrl))
 	if err != nil {
 		log.Fatal(err)
 	}
-	mongoClient = *client
+	m.client = client
 
 	// Create connect
-	err = mongoClient.Connect(context.TODO())
+	err = m.client.Connect(context.TODO())
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Check the connection
-	err = mongoClient.Ping(context.TODO(), nil)
+	err = m.client.Ping(context.TODO(), nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Println("Connected to MongoDB!")
 
-	mongoDb = mongoClient.Database(conf.MongoDb)
+	m.db = m.client.Database(m.conf.MongoDb)
 }
 
-func Disconnect() {
-	err := mongoClient.Disconnect(context.TODO())
+func (m *MongoConn) Disconnect() {
+	err := m.client.Disconnect(context.TODO())
 
 	if err != nil {
 		log.Fatal(err)
@@ -106,8 +72,8 @@ func Disconnect() {
 	fmt.Println("Connection to MongoDB closed.")
 }
 
-func GetQuestions(limit int64, offset int64) []Question {
-	coll := mongoDb.Collection("questions")
+func (m *MongoConn) GetQuestions(limit int64, offset int64) []Question {
+	coll := m.db.Collection("questions")
 
 	//find records
 	//pass these options to the Find method
@@ -139,7 +105,6 @@ func GetQuestions(limit int64, offset int64) []Question {
 		}
 
 		results = append(results, elem)
-
 	}
 
 	if err := cur.Err(); err != nil {
@@ -147,13 +112,16 @@ func GetQuestions(limit int64, offset int64) []Question {
 	}
 
 	//Close the cursor once finished
-	cur.Close(context.TODO())
+	err = cur.Close(context.TODO())
+	if err != nil {
+		fmt.Println(err)
+	}
 
 	return results
 }
 
-func InsertQuestions(question Question) *mongo.InsertOneResult {
-	coll := mongoDb.Collection("questions")
+func (m *MongoConn) InsertQuestion(question Question) *mongo.InsertOneResult {
+	coll := m.db.Collection("questions")
 
 	result, _ := coll.InsertOne(
 		context.Background(),
@@ -163,8 +131,8 @@ func InsertQuestions(question Question) *mongo.InsertOneResult {
 	return result
 }
 
-func UpdateQuestions(data bson.M, id string) *mongo.UpdateResult {
-	coll := mongoDb.Collection("questions")
+func (m *MongoConn) UpdateQuestion(data bson.M, id string) *mongo.UpdateResult {
+	coll := m.db.Collection("questions")
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
@@ -180,8 +148,8 @@ func UpdateQuestions(data bson.M, id string) *mongo.UpdateResult {
 	return result
 }
 
-func CheckQuestionByKeyword(keyword string, siteId int) *Question {
-	coll := mongoDb.Collection("questions")
+func (m *MongoConn) CheckQuestionByKeyword(keyword string, siteId int) *Question {
+	coll := m.db.Collection("questions")
 
 	var result *Question
 
@@ -197,8 +165,8 @@ func CheckQuestionByKeyword(keyword string, siteId int) *Question {
 	return result
 }
 
-func CheckQuestionsByKeywords(keywords []string, siteId int) []Question {
-	coll := mongoDb.Collection("questions")
+func (m *MongoConn) CheckQuestionsByKeywords(keywords []string, siteId int) []Question {
+	coll := m.db.Collection("questions")
 
 	findOptions := options.Find()
 	//Define an array in which you can store the decoded documents
@@ -209,7 +177,7 @@ func CheckQuestionsByKeywords(keywords []string, siteId int) []Question {
 		{"keyword", bson.D{{"$in", keywords}}},
 		{"siteid", siteId},
 	}, findOptions)
-	if err !=nil {
+	if err != nil {
 		log.Fatal(err)
 	}
 	//Finding multiple documents returns a cursor
@@ -224,15 +192,18 @@ func CheckQuestionsByKeywords(keywords []string, siteId int) []Question {
 		}
 
 		results = append(results, elem)
-
 	}
 
-	if err := cur.Err(); err != nil {
-		log.Fatal(err)
+	err = cur.Err()
+	if err != nil {
+		fmt.Println(err)
 	}
 
 	//Close the cursor once finished
-	cur.Close(context.TODO())
+	err = cur.Close(context.TODO())
+	if err != nil {
+		fmt.Println(err)
+	}
 
 	return results
 }

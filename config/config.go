@@ -20,9 +20,9 @@ func (conf *Configuration)Get(key string) string {
 	return conf.ApiHost
 }
 
-func Create() Configuration {
+func Create() *Configuration {
 	var filename = "./config/prod.json"
-	var config Configuration
+	var config *Configuration
 
 	configFile, err := os.Open(filename)
 	defer configFile.Close()

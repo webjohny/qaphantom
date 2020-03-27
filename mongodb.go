@@ -13,27 +13,31 @@ import (
 
 // You will be using this Trainer type later in the program
 type Question struct {
-	Log string
-	LogLast string
-	SiteId int
-	CatId int
-	TryCount int
-	ErrorsCount int
-	Status int
-	Error string
-	ParserId int
-	Timeout time.Time
-	Keyword string
-	FastA string
-	FastLink string
-	FastLinkTitle string
-	FastDate time.Time
+	Log string `db:"Log" json:"log"`
+	LogLast string `db:"LogLast" json:"loglast"`
+	SiteId int `db:"SiteId" json:"siteid"`
+	CatId int `db:"CatId" json:"catid"`
+	TryCount int `db:"TryCount" json:"trycount"`
+	ErrorsCount int `db:"ErrorsCount" json:"errorscount"`
+	Status int `db:"Status" json:"status"`
+	Error string `db:"Error" json:"error"`
+	ParserId int `db:"ParserId" json:"parserid"`
+	Timeout time.Time `db:"Timeout" json:"timeout"`
+	Keyword string `db:"Keyword" json:"keyword"`
+	FastA string `db:"FastA" json:"fasta"`
+	FastLink string `db:"FastLink" json:"fastlink"`
+	FastLinkTitle string `db:"FastLinkTitle" json:"fastlinktitle"`
+	FastDate time.Time `db:"FastDate" json:"fastdate"`
 }
 
 type MongoDb struct {
 	client *mongo.Client
 	db *mongo.Database
 	conf Configuration
+}
+
+func (q *Question) Create() {
+
 }
 
 func (m *MongoDb) CreateConnection() {
@@ -117,18 +121,18 @@ func (m *MongoDb) GetQuestions(limit int64, offset int64) []Question {
 	return results
 }
 
-func (m *MongoDb) InsertQuestion(question Question) *mongo.InsertOneResult {
+func (m *MongoDb) InsertQuestion(question Question) (*mongo.InsertOneResult, error) {
 	coll := m.db.Collection("questions")
 
-	result, _ := coll.InsertOne(
+	result, err := coll.InsertOne(
 		context.Background(),
 		question)
 	fmt.Println(result)
 
-	return result
+	return result, err
 }
 
-func (m *MongoDb) UpdateQuestion(data bson.M, id string) *mongo.UpdateResult {
+func (m *MongoDb) UpdateQuestion(data map[string]interface{}, id string) (*mongo.UpdateResult, error) {
 	coll := m.db.Collection("questions")
 
 	objID, err := primitive.ObjectIDFromHex(id)
@@ -136,13 +140,13 @@ func (m *MongoDb) UpdateQuestion(data bson.M, id string) *mongo.UpdateResult {
 		log.Fatal(err)
 	}
 	filter := bson.M{"_id": bson.M{"$eq": objID}}
-	result, _ := coll.UpdateOne(
+	result, err := coll.UpdateOne(
 		context.Background(),
 		filter, bson.M{
 			"$set": data,
 		})
 
-	return result
+	return result, err
 }
 
 func (m *MongoDb) CheckQuestionByKeyword(keyword string, siteId int) *Question {
@@ -154,7 +158,7 @@ func (m *MongoDb) CheckQuestionByKeyword(keyword string, siteId int) *Question {
 		"keyword": keyword,
 		"siteid": siteId,
 	}).Decode(&result)
-	if err !=nil {
+	if err != nil {
 		fmt.Println(err)
 		return nil
 	}

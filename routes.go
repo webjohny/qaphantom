@@ -15,19 +15,25 @@ import (
 type Routes struct {
 	conf Configuration
 	mongo MongoDb
+	utils Utils
 }
 
-type StatusResponse struct {
+type StdResponse struct {
 	status bool
 	msg string
 }
 
-func (th *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
+type InsertResponse struct {
+	Status bool
+	InsertedId interface{}
+}
+
+func (rt *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	commandExec := r.FormValue("cmd")
 
-	result := StatusResponse{
+	result := StdResponse{
 		status: true,
 	}
 
@@ -40,7 +46,7 @@ func (th *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(1000 * limit) * time.Millisecond)
 	defer cancel()
 	//php -f /var/www/html/cron.php parser cron sleeping 5
-	out, err := exec.CommandContext(ctx, "bash", "-c", commandExec).Output()
+	_, err := exec.CommandContext(ctx, "bash", "-c", commandExec).Output()
 
 	if err != nil {
 		// This will fail after 100 milliseconds. The 5 second sleep
@@ -48,7 +54,6 @@ func (th *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 		result.status = false
 		fmt.Println(err)
 	}
-	fmt.Println(string(out))
 
 	err = json.NewEncoder(w).Encode(result)
 	if err != nil {
@@ -56,35 +61,69 @@ func (th *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (th *Routes) CheckQuestion(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) CheckQuestion(w http.ResponseWriter, r *http.Request) {
+	id := rt.utils.toInt(r.FormValue("id"))
+	keyword := r.FormValue("keyword")
 
+	rt.mongo.CheckQuestionByKeyword(keyword, id)
 }
 
-func (th *Routes) CheckQuestions(w http.ResponseWriter, r *http.Request) {
-
+func (rt *Routes) CheckQuestions(w http.ResponseWriter, r *http.Request) {
 }
 
-func (th *Routes) UpdateQuestion(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) UpdateQuestion(w http.ResponseWriter, r *http.Request) {
 	id := r.FormValue("id")
-	data := r.FormValue("data")
-	fmt.Println(id)
-	fmt.Println(data)
+	data := rt.utils.ParseFormCollection(r, "data")
 
-	//th.mongo.UpdateQuestion(bson.M{}, id)
+	rt.mongo.UpdateQuestion(data, id)
 }
 
-func (th *Routes) InsertQuestion(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) InsertQuestion(w http.ResponseWriter, r *http.Request) {
+	question := Question{}
+	question.Log = r.FormValue("Log")
+	question.LogLast = r.FormValue("LogLast")
+	question.SiteId = rt.utils.toInt(r.FormValue("SiteId"))
+	question.CatId = rt.utils.toInt(r.FormValue("CatId"))
+	question.TryCount = rt.utils.toInt(r.FormValue("TryCount"))
+	question.ErrorsCount = rt.utils.toInt(r.FormValue("ErrorsCount"))
+	question.Status = rt.utils.toInt(r.FormValue("Status"))
+	question.Error = r.FormValue("Error")
+	question.ParserId = rt.utils.toInt(r.FormValue("ParserId"))
+	question.Timeout = time.Now()
+	question.Keyword = r.FormValue("Keyword")
+	question.FastA = r.FormValue("FastA")
+	question.FastLink = r.FormValue("FastLink")
+	question.FastLinkTitle = r.FormValue("FastLinkTitle")
+	question.FastDate = time.Now()
 
+	res, err := rt.mongo.InsertQuestion(question)
+	response := InsertResponse{
+		Status: false,
+	}
+
+	if err != nil {
+		fmt.Println(err)
+	}else{
+		response.InsertedId = res.InsertedID
+		response.Status = true
+	}
+
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
-func (th *Routes) Run() {
+func (rt *Routes) Run() {
+	rt.utils = Utils{}
+
 	r := mux.NewRouter()
 
-	r.HandleFunc("/cmd-timer", th.CmdTimer).Methods("POST")
-	r.HandleFunc("/check/question", th.CheckQuestion).Methods("POST")
-	r.HandleFunc("/check/questions", th.CheckQuestions).Methods("POST")
-	r.HandleFunc("/update/question", th.UpdateQuestion).Methods("POST")
-	r.HandleFunc("/insert/question", th.InsertQuestion).Methods("POST")
+	r.HandleFunc("/cmd-timer", rt.CmdTimer).Methods("POST")
+	r.HandleFunc("/check/question", rt.CheckQuestion).Methods("POST")
+	r.HandleFunc("/check/questions", rt.CheckQuestions).Methods("POST")
+	r.HandleFunc("/update/question", rt.UpdateQuestion).Methods("POST")
+	r.HandleFunc("/insert/question", rt.InsertQuestion).Methods("POST")
 
-	log.Fatal(http.ListenAndServe(":" + strconv.Itoa(th.conf.Port), r))
+	log.Fatal(http.ListenAndServe(":" + strconv.Itoa(rt.conf.Port), r))
 }

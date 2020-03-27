@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/webjohny/qaphantom/config"
-	"github.com/webjohny/qaphantom/pkg/middleware/connect_mongodb"
 )
 
 func main() {

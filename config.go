@@ -1,4 +1,4 @@
-package qaphantom
+package main
 
 import (
 	"encoding/json"

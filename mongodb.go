@@ -1,4 +1,4 @@
-package qaphantom
+package main
 
 import (
 	"context"
@@ -30,13 +30,13 @@ type Question struct {
 	FastDate time.Time
 }
 
-type MongoConn struct {
+type MongoDb struct {
 	client *mongo.Client
 	db *mongo.Database
 	conf Configuration
 }
 
-func (m *MongoConn) CreateConnection() {
+func (m *MongoDb) CreateConnection() {
 	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://" + m.conf.MongoUrl))
 	if err != nil {
 		log.Fatal(err)
@@ -60,7 +60,7 @@ func (m *MongoConn) CreateConnection() {
 	m.db = m.client.Database(m.conf.MongoDb)
 }
 
-func (m *MongoConn) Disconnect() {
+func (m *MongoDb) Disconnect() {
 	err := m.client.Disconnect(context.TODO())
 
 	if err != nil {
@@ -69,7 +69,7 @@ func (m *MongoConn) Disconnect() {
 	fmt.Println("Connection to MongoDB closed.")
 }
 
-func (m *MongoConn) GetQuestions(limit int64, offset int64) []Question {
+func (m *MongoDb) GetQuestions(limit int64, offset int64) []Question {
 	coll := m.db.Collection("questions")
 
 	//find records
@@ -117,7 +117,7 @@ func (m *MongoConn) GetQuestions(limit int64, offset int64) []Question {
 	return results
 }
 
-func (m *MongoConn) InsertQuestion(question Question) *mongo.InsertOneResult {
+func (m *MongoDb) InsertQuestion(question Question) *mongo.InsertOneResult {
 	coll := m.db.Collection("questions")
 
 	result, _ := coll.InsertOne(
@@ -128,7 +128,7 @@ func (m *MongoConn) InsertQuestion(question Question) *mongo.InsertOneResult {
 	return result
 }
 
-func (m *MongoConn) UpdateQuestion(data bson.M, id string) *mongo.UpdateResult {
+func (m *MongoDb) UpdateQuestion(data bson.M, id string) *mongo.UpdateResult {
 	coll := m.db.Collection("questions")
 
 	objID, err := primitive.ObjectIDFromHex(id)
@@ -145,7 +145,7 @@ func (m *MongoConn) UpdateQuestion(data bson.M, id string) *mongo.UpdateResult {
 	return result
 }
 
-func (m *MongoConn) CheckQuestionByKeyword(keyword string, siteId int) *Question {
+func (m *MongoDb) CheckQuestionByKeyword(keyword string, siteId int) *Question {
 	coll := m.db.Collection("questions")
 
 	var result *Question
@@ -162,7 +162,7 @@ func (m *MongoConn) CheckQuestionByKeyword(keyword string, siteId int) *Question
 	return result
 }
 
-func (m *MongoConn) CheckQuestionsByKeywords(keywords []string, siteId int) []Question {
+func (m *MongoDb) CheckQuestionsByKeywords(keywords []string, siteId int) []Question {
 	coll := m.db.Collection("questions")
 
 	findOptions := options.Find()

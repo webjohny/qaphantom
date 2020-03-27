@@ -1,11 +1,11 @@
-package qaphantom
+package main
 
 func main() {
 	conf := Configuration{}
 	conf.Create()
 
 	// Connect to MongoDB
-	mongoDb := MongoConn{
+	mongoDb := MongoDb{
 		conf: conf,
 	}
 	mongoDb.CreateConnection()

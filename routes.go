@@ -1,4 +1,4 @@
-package qaphantom
+package main
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 
 type Routes struct {
 	conf Configuration
-	mongo MongoConn
+	mongo MongoDb
 }
 
 type StatusResponse struct {

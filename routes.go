@@ -1,11 +1,10 @@
-package main
+package qaphantom
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
-	"github.com/webjohny/qaphantom/config"
 	"log"
 	"net/http"
 	"os/exec"
@@ -14,7 +13,7 @@ import (
 )
 
 type Routes struct {
-	conf *config.Configuration
+	conf Configuration
 	mongo MongoConn
 }
 
@@ -79,16 +78,13 @@ func (th *Routes) InsertQuestion(w http.ResponseWriter, r *http.Request) {
 }
 
 func (th *Routes) Run() {
-	routes := Routes{
-		conf: th.conf,
-	}
 	r := mux.NewRouter()
 
-	r.HandleFunc("/cmd-timer", routes.CmdTimer).Methods("POST")
-	r.HandleFunc("/check/question", routes.CheckQuestion).Methods("POST")
-	r.HandleFunc("/check/questions", routes.CheckQuestions).Methods("POST")
-	r.HandleFunc("/update/question", routes.UpdateQuestion).Methods("POST")
-	r.HandleFunc("/insert/question", routes.InsertQuestion).Methods("POST")
+	r.HandleFunc("/cmd-timer", th.CmdTimer).Methods("POST")
+	r.HandleFunc("/check/question", th.CheckQuestion).Methods("POST")
+	r.HandleFunc("/check/questions", th.CheckQuestions).Methods("POST")
+	r.HandleFunc("/update/question", th.UpdateQuestion).Methods("POST")
+	r.HandleFunc("/insert/question", th.InsertQuestion).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(":" + strconv.Itoa(th.conf.Port), r))
 }

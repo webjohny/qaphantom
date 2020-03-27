@@ -1,4 +1,4 @@
-package main
+package qaphantom
 
 import (
 	"encoding/json"
@@ -16,13 +16,12 @@ type Configuration struct {
 	MongoDb   string
 }
 
-func (conf *Configuration)Get(key string) string {
+func (conf *Configuration) Get(key string) string {
 	return conf.ApiHost
 }
 
-func Create() *Configuration {
+func (conf *Configuration) Create() {
 	var filename = "./config/prod.json"
-	var config *Configuration
 
 	configFile, err := os.Open(filename)
 	defer configFile.Close()
@@ -30,7 +29,5 @@ func Create() *Configuration {
 		fmt.Println(err.Error())
 	}
 	jsonParser := json.NewDecoder(configFile)
-	jsonParser.Decode(&config)
-
-	return config
+	jsonParser.Decode(&conf)
 }

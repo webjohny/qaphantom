@@ -1,9 +1,8 @@
-package main
+package qaphantom
 
 import (
 	"context"
 	"fmt"
-	"github.com/webjohny/qaphantom/config"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -34,12 +33,10 @@ type Question struct {
 type MongoConn struct {
 	client *mongo.Client
 	db *mongo.Database
-	conf *config.Configuration
+	conf Configuration
 }
 
 func (m *MongoConn) CreateConnection() {
-	m.conf = config.Create()
-
 	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://" + m.conf.MongoUrl))
 	if err != nil {
 		log.Fatal(err)

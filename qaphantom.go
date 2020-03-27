@@ -1,11 +1,8 @@
-package main
-
-import (
-	"github.com/webjohny/qaphantom/config"
-)
+package qaphantom
 
 func main() {
-	conf := config.Create()
+	conf := Configuration{}
+	conf.Create()
 
 	// Connect to MongoDB
 	mongoDb := MongoConn{

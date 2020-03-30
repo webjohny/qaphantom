@@ -8,8 +8,8 @@ import (
 )
 type Utils struct {}
 
-func (u *Utils) ParseFormCollection(r *http.Request, typeName string) map[string]interface{} {
-	result := make(map[string]interface{})
+func (u *Utils) ParseFormCollection(r *http.Request, typeName string) map[string]string {
+	result := make(map[string]string)
 	if err := r.ParseForm(); err != nil {
 		fmt.Println(err)
 	}

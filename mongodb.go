@@ -132,13 +132,15 @@ func (m *MongoDb) InsertQuestion(question Question) (*mongo.InsertOneResult, err
 	return result, err
 }
 
-func (m *MongoDb) UpdateQuestion(data map[string]interface{}, id string) (*mongo.UpdateResult, error) {
+func (m *MongoDb) UpdateQuestion(data map[string]string, id string) (*mongo.UpdateResult, error) {
 	coll := m.db.Collection("questions")
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		return nil, err
 	}
+
 	filter := bson.M{"_id": bson.M{"$eq": objID}}
 	result, err := coll.UpdateOne(
 		context.Background(),

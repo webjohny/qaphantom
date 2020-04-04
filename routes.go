@@ -1,14 +1,14 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"log"
 	"net/http"
-	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -16,9 +16,8 @@ type Routes struct {
 	conf Configuration
 	mongo MongoDb
 	utils Utils
+	streams Streams
 }
-
-var streams map[int]bool
 
 func (rt *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -31,7 +30,8 @@ func (rt *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 		limit, _ = strconv.ParseInt(r.FormValue("limit"), 0, 64)
 	}
 
-	status := startTaskTimer(commandExec, limit)
+	stream := Stream{}
+	status := stream.StartTaskTimer(commandExec, limit)
 
 	err := json.NewEncoder(w).Encode(map[string]bool{
 		"status": status,
@@ -39,24 +39,6 @@ func (rt *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Println(err)
 	}
-}
-
-func startTaskTimer(commandExec string, limit int64) bool {
-	var status bool = true
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(1000 * limit) * time.Millisecond)
-	defer cancel()
-	//php -f /var/www/html/cron.php parser cron sleeping 5
-	_, err := exec.CommandContext(ctx, "bash", "-c", commandExec).Output()
-
-	if err != nil {
-		// This will fail after 100 milliseconds. The 5 second sleep
-		// will be interrupted.
-		status = false
-		fmt.Println(err)
-	}
-
-	return status
 }
 
 func (rt *Routes) CheckQuestion(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +63,60 @@ func (rt *Routes) CheckQuestions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	questions := rt.mongo.CheckQuestionsByKeywords(arrKeywords, siteId)
+
+	err := json.NewEncoder(w).Encode(questions)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func (rt *Routes) GetFreeQuestion(w http.ResponseWriter, r *http.Request) {
+	dataIds := r.FormValue("ids")
+
+	var ids []string
+
+	if dataIds != "" {
+		ids = strings.Split(dataIds, ",")
+	}
+	fmt.Println(ids)
+
+	question := rt.mongo.GetFreeQuestion(ids)
+
+	err := json.NewEncoder(w).Encode(question)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func (rt *Routes) GetCats(w http.ResponseWriter, r *http.Request) {
+	params := make(map[string]interface{})
+
+	params["limit"] = r.FormValue("limit")
+	params["offset"] = r.FormValue("offset")
+	postData := map[string]interface{}{}
+
+	if r.FormValue("site_id") != "" {
+		val, _ := strconv.Atoi(r.FormValue("site_id"))
+		postData["site_id"] = val
+	}
+	if r.FormValue("title") != "" {
+		postData["title"] = r.FormValue("title")
+	}
+
+	questions := rt.mongo.GetCats(params, postData)
+
+	err := json.NewEncoder(w).Encode(questions)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func (rt *Routes) GetQuestions(w http.ResponseWriter, r *http.Request) {
+	params := make(map[string]interface{})
+
+	params["limit"] = 1
+
+	questions := rt.mongo.GetQuestions(params)
 
 	err := json.NewEncoder(w).Encode(questions)
 	if err != nil {
@@ -114,10 +150,13 @@ func (rt *Routes) InsertQuestion(w http.ResponseWriter, r *http.Request) {
 	question.Log = r.FormValue("Log")
 	question.LogLast = r.FormValue("LogLast")
 	question.SiteId = rt.utils.toInt(r.FormValue("SiteId"))
-	question.CatId = rt.utils.toInt(r.FormValue("CatId"))
+	question.Cat = r.FormValue("Cat")
+	if r.FormValue("CatId") != "" {
+		question.CatId, _ = primitive.ObjectIDFromHex(r.FormValue("CatId"))
+	}
 	question.TryCount = rt.utils.toInt(r.FormValue("TryCount"))
 	question.ErrorsCount = rt.utils.toInt(r.FormValue("ErrorsCount"))
-	question.Status = rt.utils.toInt(r.FormValue("Status"))
+	question.Status = rt.utils.toInt(r.FormValue("status"))
 	question.Error = r.FormValue("Error")
 	question.ParserId = rt.utils.toInt(r.FormValue("ParserId"))
 	question.Timeout = time.Now()
@@ -128,48 +167,61 @@ func (rt *Routes) InsertQuestion(w http.ResponseWriter, r *http.Request) {
 	question.FastDate = time.Now()
 
 	res, err := rt.mongo.InsertQuestion(question)
-	response := map[string]interface{}{
-		"status": false,
-	}
 
 	if err != nil {
 		fmt.Println(err)
 	}else{
-		response["insertedId"] = res.InsertedID
-		response["status"] = true
+		question.Id = res.InsertedID
+
+		err = json.NewEncoder(w).Encode(question)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+}
+
+func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
+	count := rt.utils.toInt(r.FormValue("count"))
+	limit := rt.utils.toInt(r.FormValue("limit"))
+	cmd := r.FormValue("cmd")
+
+	if limit < 1 {
+		limit = 10
 	}
 
-	err = json.NewEncoder(w).Encode(response)
+	rt.streams.StopAll()
+
+	go func() {
+		for i := 1; i <= count; i++ {
+			stream := rt.streams.Add(i)
+			stream.cmd = cmd + " " + strconv.Itoa(i)
+			go stream.Start(i, int64(limit*1000))
+		}
+	}()
+
+	err := json.NewEncoder(w).Encode(map[string]bool{
+		"status": true,
+	})
 	if err != nil {
 		fmt.Println(err)
 	}
 }
 
-func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
-
-}
-
 func (rt *Routes) StopLoopStreams(w http.ResponseWriter, r *http.Request) {
+	go rt.streams.StopAll()
 
-}
-
-func (rt *Routes) StartStream(w http.ResponseWriter, r *http.Request) {
-	streamId := rt.utils.toInt(r.FormValue("streamId"))
-	streams[streamId] = true
-
-	for {
-		if ! streams[streamId] {
-			break
-		}
-		startTaskTimer("php -f /var/www/html/cron.php parser cron sleeping 5", 1000)
+	err := json.NewEncoder(w).Encode(map[string]bool{
+		"status": true,
+	})
+	if err != nil {
+		fmt.Println(err)
 	}
 }
 
 func (rt *Routes) StopStream(w http.ResponseWriter, r *http.Request) {
-	streamId := rt.utils.toInt(r.FormValue("streamId"))
-	if streams[streamId] {
-		streams[streamId] = false
-	}
+	id := rt.utils.toInt(r.FormValue("id"))
+
+	rt.streams.Stop(id)
 }
 
 func (rt *Routes) Run() {
@@ -181,13 +233,16 @@ func (rt *Routes) Run() {
 	r.HandleFunc("/check/questions", rt.CheckQuestions).Methods("POST")
 	r.HandleFunc("/update/question", rt.UpdateQuestion).Methods("POST")
 	r.HandleFunc("/insert/question", rt.InsertQuestion).Methods("POST")
+	r.HandleFunc("/get/cats", rt.GetCats).Methods("POST")
+	r.HandleFunc("/get/questions", rt.GetQuestions).Methods("POST")
+	r.HandleFunc("/get/free-question", rt.GetFreeQuestion).Methods("GET")
 
 	r.HandleFunc("/cmd-timer", rt.CmdTimer).Methods("POST")
 
 	r.HandleFunc("/loop-streams/start", rt.StartLoopStreams).Methods("POST")
-	r.HandleFunc("/loop-streams/stop", rt.StopLoopStreams).Methods("POST")
+	r.HandleFunc("/loop-streams/stop", rt.StopLoopStreams).Methods("GET")
 
-	r.HandleFunc("/stream/start", rt.StartStream).Methods("POST")
+	//r.HandleFunc("/stream/start", rt.StartStream).Methods("POST")
 	r.HandleFunc("/stream/stop", rt.StopStream).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(":" + strconv.Itoa(rt.conf.Port), r))

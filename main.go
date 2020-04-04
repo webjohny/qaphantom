@@ -14,6 +14,8 @@ func main() {
 	routes := Routes{
 		mongo: mongoDb,
 		conf: conf,
+		streams: Streams{},
 	}
+
 	routes.Run()
 }

@@ -16,12 +16,8 @@ type Configuration struct {
 	MongoDb   string
 }
 
-func (conf *Configuration) Get(key string) string {
-	return conf.ApiHost
-}
-
 func (conf *Configuration) Create() {
-	var filename = "./config/prod.json"
+	var filename = "./config.json"
 
 	configFile, err := os.Open(filename)
 	defer configFile.Close()

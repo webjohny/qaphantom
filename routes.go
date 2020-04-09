@@ -111,10 +111,111 @@ func (rt *Routes) GetCats(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (rt *Routes) GetQuestions(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) GetQuestionsForStat(w http.ResponseWriter, r *http.Request) {
 	params := make(map[string]interface{})
 
-	params["limit"] = 1
+	questions := rt.mongo.GetQuestions(params)
+
+	stat := map[int]map[string]interface{}{}
+
+	//notCorrectData := make([]interface{}, 0)
+
+	for _, question := range questions {
+		if question["site_id"] == nil {
+			//notCorrectData = append(notCorrectData, question)
+			continue
+		}
+		siteId := int(question["site_id"].(int32))
+
+		switch question["cat_id"].(type) {
+			case primitive.ObjectID:
+				catIdObj := question["cat_id"].(primitive.ObjectID)
+				catId := catIdObj.Hex()
+				status := question["status"].(int32)
+				site := map[string]interface{}{}
+
+				if item, ok := stat[siteId]; ok {
+					site = item
+				}
+
+				if _, ok := question["site_info"]; ok {
+					siteInfo := question["site_info"].(map[string]interface{})
+					site["domain"] = siteInfo["domain"].(string)
+				}
+
+				if _, ok := site["ready"]; ! ok {
+					site["ready"] = 0
+				}
+
+				if _, ok := site["error"]; ! ok {
+					site["error"] = 0
+				}
+
+				if _, ok := site["total"]; ! ok {
+					site["total"] = 0
+				}
+
+				cats := map[string]interface{}{}
+				cat := map[string]interface{}{}
+
+				_, ok := site["cats"]
+				if ok && len(site["cats"].(map[string]interface{})) > 0 {
+					cats = site["cats"].(map[string]interface{})
+
+					_, ok := cats[catId]
+					if ok && len(cats[catId].(map[string]interface{})) > 0 {
+						cat = cats[catId].(map[string]interface{})
+					}
+				}
+
+				if _, ok := question["cat_info"]; ok {
+					catInfo := question["cat_info"].(map[string]interface{})
+					cat["title"] = catInfo["title"].(string)
+				}
+
+
+				if _, ok := cat["ready"]; ! ok {
+					cat["ready"] = 0
+				}
+
+				if _, ok := cat["error"]; ! ok {
+					cat["error"] = 0
+				}
+
+				if _, ok := cat["total"]; ! ok {
+					cat["total"] = 0
+				}
+
+				if status == 2 {
+					site["error"] = site["error"].(int) + 1
+					cat["error"] = cat["error"].(int) + 1
+				} else if status == 1 {
+					site["ready"] = site["ready"].(int) + 1
+					cat["ready"] = cat["ready"].(int) + 1
+				}
+
+				site["total"] = site["total"].(int) + 1
+				cat["total"] = cat["total"].(int) + 1
+
+				cats[catId] = cat
+				site["cats"] = cats
+
+				stat[siteId] = site
+				//notCorrectData = append(notCorrectData, question)
+			default:
+				//notCorrectData = append(notCorrectData, question)
+				continue
+		}
+	}
+
+	err := json.NewEncoder(w).Encode(stat)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func (rt *Routes) GetQuestions(w http.ResponseWriter, r *http.Request) {
+	params := make(map[string]interface{})
 
 	questions := rt.mongo.GetQuestions(params)
 
@@ -234,6 +335,7 @@ func (rt *Routes) Run() {
 	r.HandleFunc("/update/question", rt.UpdateQuestion).Methods("POST")
 	r.HandleFunc("/insert/question", rt.InsertQuestion).Methods("POST")
 	r.HandleFunc("/get/cats", rt.GetCats).Methods("POST")
+	r.HandleFunc("/get/questions-stat", rt.GetQuestionsForStat).Methods("POST")
 	r.HandleFunc("/get/questions", rt.GetQuestions).Methods("POST")
 	r.HandleFunc("/get/free-question", rt.GetFreeQuestion).Methods("GET")
 

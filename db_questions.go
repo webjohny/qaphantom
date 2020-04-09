@@ -12,11 +12,11 @@ import (
 	"time"
 )
 
-var SitesLookupStage = bson.D{{"$lookup", bson.D{{"from", "sites"}, {"localField", "site_id"}, {"foreignField", "id"}, {"as", "site"}}}}
-var SitesUnwindStage = bson.D{{"$unwind", bson.D{{"path", "$site"}, {"preserveNullAndEmptyArrays", true}}}}
+var SitesLookupStage = bson.D{{"$lookup", bson.D{{"from", "sites"}, {"localField", "site_id"}, {"foreignField", "id"}, {"as", "site_info"}}}}
+var SitesUnwindStage = bson.D{{"$unwind", bson.D{{"path", "$site_info"}, {"preserveNullAndEmptyArrays", true}}}}
 
-var CatsLookupStage = bson.D{{"$lookup", bson.D{{"from", "cats"}, {"localField", "cat_id"}, {"foreignField", "id"}, {"as", "cat"}}}}
-var CatsUnwindStage = bson.D{{"$unwind", bson.D{{"path", "$cat"}, {"preserveNullAndEmptyArrays", true}}}}
+var CatsLookupStage = bson.D{{"$lookup", bson.D{{"from", "cats"}, {"localField", "cat_id"}, {"foreignField", "_id"}, {"as", "cat_info"}}}}
+var CatsUnwindStage = bson.D{{"$unwind", bson.D{{"path", "$cat_info"}, {"preserveNullAndEmptyArrays", true}}}}
 
 func (m *MongoDb) InsertQuestion(question Question) (*mongo.InsertOneResult, error) {
 	coll := m.db.Collection("questions")

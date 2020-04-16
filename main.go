@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 func main() {
 	conf := Configuration{}
 	conf.Create()
@@ -18,4 +20,5 @@ func main() {
 	}
 
 	routes.Run()
+	time.Sleep(time.Minute)
 }

@@ -6,15 +6,15 @@ func main() {
 	conf := Configuration{}
 	conf.Create()
 
-	// Connect to MongoDB
-	mongoDb := MongoDb{
+	// Connect to MysqlDB
+	mysqlDb := MysqlDb{
 		conf: conf,
 	}
-	mongoDb.CreateConnection()
+	mysqlDb.CreateConnection()
 
 	// Run routes
 	routes := Routes{
-		mongo: mongoDb,
+		mysql: mysqlDb,
 		conf: conf,
 		streams: Streams{},
 	}

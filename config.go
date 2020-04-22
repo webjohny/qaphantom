@@ -14,6 +14,10 @@ type Configuration struct {
 	ApiSecret string
 	MongoUrl  string
 	MongoDb   string
+	MysqlHost  string
+	MysqlDb   string
+	MysqlLogin   string
+	MysqlPass   string
 }
 
 func (conf *Configuration) Create() {

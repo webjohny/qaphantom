@@ -4,17 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type Routes struct {
 	conf Configuration
-	mongo MongoDb
+	mysql MysqlDb
 	utils Utils
 	streams Streams
 }
@@ -41,36 +39,36 @@ func (rt *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (rt *Routes) CheckQuestion(w http.ResponseWriter, r *http.Request) {
-	siteId := rt.utils.toInt(r.FormValue("id"))
-	keyword := r.FormValue("keyword")
+//func (rt *Routes) CheckQuestion(w http.ResponseWriter, r *http.Request) {
+//	siteId := rt.utils.toInt(r.FormValue("id"))
+//	keyword := r.FormValue("keyword")
+//
+//	question := rt.mongo.CheckQuestionByKeyword(keyword, siteId)
+//
+//	err := json.NewEncoder(w).Encode(question)
+//	if err != nil {
+//		fmt.Println(err)
+//	}
+//}
 
-	question := rt.mongo.CheckQuestionByKeyword(keyword, siteId)
+//func (rt *Routes) CheckQuestions(w http.ResponseWriter, r *http.Request) {
+//	siteId := rt.utils.toInt(r.FormValue("id"))
+//	keywords := rt.utils.ParseFormCollection(r,"keywords")
+//
+//	var arrKeywords []string
+//	for _, v := range keywords {
+//		arrKeywords = append(arrKeywords, v)
+//	}
+//
+//	questions := rt.mongo.CheckQuestionsByKeywords(arrKeywords, siteId)
+//
+//	err := json.NewEncoder(w).Encode(questions)
+//	if err != nil {
+//		fmt.Println(err)
+//	}
+//}
 
-	err := json.NewEncoder(w).Encode(question)
-	if err != nil {
-		fmt.Println(err)
-	}
-}
-
-func (rt *Routes) CheckQuestions(w http.ResponseWriter, r *http.Request) {
-	siteId := rt.utils.toInt(r.FormValue("id"))
-	keywords := rt.utils.ParseFormCollection(r,"keywords")
-
-	var arrKeywords []string
-	for _, v := range keywords {
-		arrKeywords = append(arrKeywords, v)
-	}
-
-	questions := rt.mongo.CheckQuestionsByKeywords(arrKeywords, siteId)
-
-	err := json.NewEncoder(w).Encode(questions)
-	if err != nil {
-		fmt.Println(err)
-	}
-}
-
-func (rt *Routes) GetFreeQuestion(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) GetFreeTask(w http.ResponseWriter, r *http.Request) {
 	dataIds := r.FormValue("ids")
 
 	var ids []string
@@ -80,7 +78,7 @@ func (rt *Routes) GetFreeQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println(ids)
 
-	question := rt.mongo.GetFreeQuestion(ids)
+	question := rt.mysql.GetFreeTask(ids)
 
 	err := json.NewEncoder(w).Encode(question)
 	if err != nil {
@@ -103,35 +101,36 @@ func (rt *Routes) GetCats(w http.ResponseWriter, r *http.Request) {
 		postData["title"] = r.FormValue("title")
 	}
 
-	questions := rt.mongo.GetCats(params, postData)
+	cats := rt.mysql.GetCats(params, postData)
 
-	err := json.NewEncoder(w).Encode(questions)
+	err := json.NewEncoder(w).Encode(cats)
 	if err != nil {
 		fmt.Println(err)
 	}
 }
 
-func (rt *Routes) GetQuestionsForStat(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) GetTasksForStat(w http.ResponseWriter, r *http.Request) {
 
-	count := rt.mongo.GetCountQuestions(map[string]interface{}{})
+	count := rt.mysql.GetCountTasks(map[string]interface{}{})
 
-	stat := map[int]map[string]interface{}{}
+	stat := map[int64]map[string]interface{}{}
 
-	fmt.Println(1)
+	//stat = rt.mysql.CollectStats()
 
-	go rt.mongo.LoopCollectStats()
+	go rt.mysql.LoopCollectStats()
 
 	if count > 10000 {
-		sites := rt.mongo.GetSites(map[string]interface{}{}, map[string]interface{}{})
+		sites := rt.mysql.GetSites(map[string]interface{}{}, map[string]interface{}{})
 		if len(sites) > 0 {
 			for _, site := range sites {
-				if site["info"] != nil {
-					stat[int(site["id"].(int32))] = site["info"].(map[string]interface{})
+				info := site.GetInfo()
+				if info != nil {
+					stat[site.Id.Int64] = info
 				}
 			}
 		}
 	}else{
-		stat = rt.mongo.CollectStats()
+		stat = rt.mysql.CollectStats()
 	}
 
 	err := json.NewEncoder(w).Encode(stat)
@@ -140,72 +139,72 @@ func (rt *Routes) GetQuestionsForStat(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (rt *Routes) GetQuestions(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) GetTasks(w http.ResponseWriter, r *http.Request) {
 	params := make(map[string]interface{})
 
-	questions := rt.mongo.GetQuestions(params)
+	tasks := rt.mysql.GetTasks(params)
 
-	err := json.NewEncoder(w).Encode(questions)
+	err := json.NewEncoder(w).Encode(tasks)
 	if err != nil {
 		fmt.Println(err)
 	}
 }
-
-func (rt *Routes) UpdateQuestion(w http.ResponseWriter, r *http.Request) {
-	id := r.FormValue("id")
-	data := rt.utils.ParseFormCollection(r, "data")
-
-	response := map[string]bool{
-		"status": false,
-	}
-
-	_, err := rt.mongo.UpdateQuestion(data, id)
-	if err != nil {
-		fmt.Println(err)
-	}else{
-		response["status"] = true
-	}
-
-	err = json.NewEncoder(w).Encode(response)
-	if err != nil {
-		fmt.Println(err)
-	}
-}
-
-func (rt *Routes) InsertQuestion(w http.ResponseWriter, r *http.Request) {
-	question := Question{}
-	question.Log = r.FormValue("Log")
-	question.LogLast = r.FormValue("LogLast")
-	question.SiteId = rt.utils.toInt(r.FormValue("SiteId"))
-	question.Cat = r.FormValue("Cat")
-	if r.FormValue("CatId") != "" {
-		question.CatId, _ = primitive.ObjectIDFromHex(r.FormValue("CatId"))
-	}
-	question.TryCount = rt.utils.toInt(r.FormValue("TryCount"))
-	question.ErrorsCount = rt.utils.toInt(r.FormValue("ErrorsCount"))
-	question.Status = rt.utils.toInt(r.FormValue("status"))
-	question.Error = r.FormValue("Error")
-	question.ParserId = rt.utils.toInt(r.FormValue("ParserId"))
-	question.Timeout = time.Now()
-	question.Keyword = r.FormValue("Keyword")
-	question.FastA = r.FormValue("FastA")
-	question.FastLink = r.FormValue("FastLink")
-	question.FastLinkTitle = r.FormValue("FastLinkTitle")
-	question.FastDate = time.Now()
-
-	res, err := rt.mongo.InsertQuestion(question)
-
-	if err != nil {
-		fmt.Println(err)
-	}else{
-		question.Id = res.InsertedID
-
-		err = json.NewEncoder(w).Encode(question)
-		if err != nil {
-			fmt.Println(err)
-		}
-	}
-}
+//
+//func (rt *Routes) UpdateQuestion(w http.ResponseWriter, r *http.Request) {
+//	id := r.FormValue("id")
+//	data := rt.utils.ParseFormCollection(r, "data")
+//
+//	response := map[string]bool{
+//		"status": false,
+//	}
+//
+//	_, err := rt.mongo.UpdateQuestion(data, id)
+//	if err != nil {
+//		fmt.Println(err)
+//	}else{
+//		response["status"] = true
+//	}
+//
+//	err = json.NewEncoder(w).Encode(response)
+//	if err != nil {
+//		fmt.Println(err)
+//	}
+//}
+//
+//func (rt *Routes) InsertQuestion(w http.ResponseWriter, r *http.Request) {
+//	question := Question{}
+//	question.Log = r.FormValue("Log")
+//	question.LogLast = r.FormValue("LogLast")
+//	question.SiteId = rt.utils.toInt(r.FormValue("SiteId"))
+//	question.Cat = r.FormValue("Cat")
+//	if r.FormValue("CatId") != "" {
+//		question.CatId, _ = primitive.ObjectIDFromHex(r.FormValue("CatId"))
+//	}
+//	question.TryCount = rt.utils.toInt(r.FormValue("TryCount"))
+//	question.ErrorsCount = rt.utils.toInt(r.FormValue("ErrorsCount"))
+//	question.Status = rt.utils.toInt(r.FormValue("status"))
+//	question.Error = r.FormValue("Error")
+//	question.ParserId = rt.utils.toInt(r.FormValue("ParserId"))
+//	question.Timeout = time.Now()
+//	question.Keyword = r.FormValue("Keyword")
+//	question.FastA = r.FormValue("FastA")
+//	question.FastLink = r.FormValue("FastLink")
+//	question.FastLinkTitle = r.FormValue("FastLinkTitle")
+//	question.FastDate = time.Now()
+//
+//	res, err := rt.mongo.InsertQuestion(question)
+//
+//	if err != nil {
+//		fmt.Println(err)
+//	}else{
+//		question.Id = res.InsertedID
+//
+//		err = json.NewEncoder(w).Encode(question)
+//		if err != nil {
+//			fmt.Println(err)
+//		}
+//	}
+//}
 
 func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
 	count := rt.utils.toInt(r.FormValue("count"))
@@ -256,14 +255,14 @@ func (rt *Routes) Run() {
 
 	r := mux.NewRouter()
 
-	r.HandleFunc("/check/question", rt.CheckQuestion).Methods("POST")
-	r.HandleFunc("/check/questions", rt.CheckQuestions).Methods("POST")
-	r.HandleFunc("/update/question", rt.UpdateQuestion).Methods("POST")
-	r.HandleFunc("/insert/question", rt.InsertQuestion).Methods("POST")
+	//r.HandleFunc("/check/question", rt.CheckQuestion).Methods("POST")
+	//r.HandleFunc("/check/questions", rt.CheckQuestions).Methods("POST")
+	//r.HandleFunc("/update/question", rt.UpdateQuestion).Methods("POST")
+	//r.HandleFunc("/insert/question", rt.InsertQuestion).Methods("POST")
 	r.HandleFunc("/get/cats", rt.GetCats).Methods("POST")
-	r.HandleFunc("/get/questions-stat", rt.GetQuestionsForStat).Methods("POST")
-	r.HandleFunc("/get/questions", rt.GetQuestions).Methods("POST")
-	r.HandleFunc("/get/free-question", rt.GetFreeQuestion).Methods("GET")
+	r.HandleFunc("/get/task-stats", rt.GetTasksForStat).Methods("POST")
+	r.HandleFunc("/get/tasks", rt.GetTasks).Methods("POST")
+	r.HandleFunc("/get/free-task", rt.GetFreeTask).Methods("GET")
 
 	r.HandleFunc("/cmd-timer", rt.CmdTimer).Methods("POST")
 

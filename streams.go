@@ -90,5 +90,10 @@ func (s *Streams) StopAll() {
 		for _, stream := range s.items {
 			stream.Stop()
 		}
+		s.items = map[int]*Stream{}
 	}
+}
+
+func (s *Streams) Count() int {
+	return len(s.items)
 }

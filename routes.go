@@ -244,6 +244,15 @@ func (rt *Routes) StopLoopStreams(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (rt *Routes) CountLoopStreams(w http.ResponseWriter, r *http.Request) {
+	count := rt.streams.Count()
+
+	_, err := fmt.Fprintln(w, strconv.Itoa(count))
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (rt *Routes) StopStream(w http.ResponseWriter, r *http.Request) {
 	id := rt.utils.toInt(r.FormValue("id"))
 
@@ -266,6 +275,7 @@ func (rt *Routes) Run() {
 
 	r.HandleFunc("/cmd-timer", rt.CmdTimer).Methods("POST")
 
+	r.HandleFunc("/loop-streams/count", rt.CountLoopStreams).Methods("GET")
 	r.HandleFunc("/loop-streams/start", rt.StartLoopStreams).Methods("POST")
 	r.HandleFunc("/loop-streams/stop", rt.StopLoopStreams).Methods("GET")
 

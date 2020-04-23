@@ -4,7 +4,6 @@ import (
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	"log"
 )
 
 type MysqlDb struct {
@@ -26,7 +25,7 @@ func (m *MysqlDb) Disconnect() {
 	err := m.db.Close()
 
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	fmt.Println("Connection to MySQL closed.")
 }

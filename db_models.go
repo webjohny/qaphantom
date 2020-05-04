@@ -36,6 +36,7 @@ type MysqlSite struct {
 	Password sql.NullString `db:"password" json:"password"`
 	From sql.NullInt64 `db:"from" json:"from"`
 	To sql.NullInt64 `db:"to" json:"to"`
+	QstsLimit int `db:"qsts_limit" json:"qsts_limit"`
 	Linking int `db:"linking" json:"linking"`
 	Header int `db:"header" json:"header"`
 	SubHeaders int `db:"subheaders" json:"subheaders"`

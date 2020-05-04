@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Routes struct {
@@ -206,6 +207,22 @@ func (rt *Routes) GetTasks(w http.ResponseWriter, r *http.Request) {
 //	}
 //}
 
+func (rt *Routes) StartStreams(count int, limit int, cmd string) {
+	fmt.Println("Started")
+	for i := 1; i <= count; i++ {
+		stream := rt.streams.Add(i)
+		stream.cmd = cmd + " " + strconv.Itoa(i)
+		go stream.Start(i, int64(limit*1000))
+	}
+}
+
+func (rt *Routes) ReStartStreams(count int, limit int, cmd string) {
+	fmt.Println("Restarted streams")
+	rt.streams.StopAllWithoutClean()
+	time.Sleep(time.Minute * 5)
+	rt.StartStreams(count, limit, cmd)
+}
+
 func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
 	count := rt.utils.toInt(r.FormValue("count"))
 	limit := rt.utils.toInt(r.FormValue("limit"))
@@ -217,13 +234,19 @@ func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
 
 	rt.streams.StopAll()
 
-	go func() {
-		for i := 1; i <= count; i++ {
-			stream := rt.streams.Add(i)
-			stream.cmd = cmd + " " + strconv.Itoa(i)
-			go stream.Start(i, int64(limit*1000))
+	var intval chan bool
+
+	intval = rt.utils.SetInterval(func() {
+		if !rt.streams.isStarted {
+			intval <- true
+			fmt.Println("Stopped interval")
+		}else {
+			rt.ReStartStreams(count, limit, cmd)
 		}
-	}()
+	}, 6200000, true)
+
+	rt.streams.isStarted = true
+	go rt.StartStreams(count, limit, cmd)
 
 	err := json.NewEncoder(w).Encode(map[string]bool{
 		"status": true,
@@ -234,6 +257,7 @@ func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rt *Routes) StopLoopStreams(w http.ResponseWriter, r *http.Request) {
+	rt.streams.isStarted = false
 	go rt.streams.StopAll()
 
 	err := json.NewEncoder(w).Encode(map[string]bool{

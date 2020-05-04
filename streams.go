@@ -58,6 +58,7 @@ func (s *Stream) Stop() {
 
 
 type Streams struct {
+	isStarted bool
 	items map[int]*Stream
 }
 
@@ -86,11 +87,21 @@ func (s *Streams) Stop(id int) {
 }
 
 func (s *Streams) StopAll() {
+	fmt.Println("Stopped")
 	if len(s.items) > 0 {
 		for _, stream := range s.items {
 			stream.Stop()
 		}
 		s.items = map[int]*Stream{}
+	}
+}
+
+func (s *Streams) StopAllWithoutClean() {
+	fmt.Println("Stopped without clean")
+	if len(s.items) > 0 {
+		for _, stream := range s.items {
+			stream.Stop()
+		}
 	}
 }
 

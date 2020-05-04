@@ -217,7 +217,7 @@ func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 			}
 		}
 
-		if true {
+		if count > 10000 {
 			for k, v := range stat {
 				info, err := json.Marshal(v)
 				if err != nil {

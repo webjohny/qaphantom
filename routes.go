@@ -40,35 +40,6 @@ func (rt *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//func (rt *Routes) CheckQuestion(w http.ResponseWriter, r *http.Request) {
-//	siteId := rt.utils.toInt(r.FormValue("id"))
-//	keyword := r.FormValue("keyword")
-//
-//	question := rt.mongo.CheckQuestionByKeyword(keyword, siteId)
-//
-//	err := json.NewEncoder(w).Encode(question)
-//	if err != nil {
-//		fmt.Println(err)
-//	}
-//}
-
-//func (rt *Routes) CheckQuestions(w http.ResponseWriter, r *http.Request) {
-//	siteId := rt.utils.toInt(r.FormValue("id"))
-//	keywords := rt.utils.ParseFormCollection(r,"keywords")
-//
-//	var arrKeywords []string
-//	for _, v := range keywords {
-//		arrKeywords = append(arrKeywords, v)
-//	}
-//
-//	questions := rt.mongo.CheckQuestionsByKeywords(arrKeywords, siteId)
-//
-//	err := json.NewEncoder(w).Encode(questions)
-//	if err != nil {
-//		fmt.Println(err)
-//	}
-//}
-
 func (rt *Routes) GetFreeTask(w http.ResponseWriter, r *http.Request) {
 	dataIds := r.FormValue("ids")
 
@@ -150,62 +121,6 @@ func (rt *Routes) GetTasks(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 	}
 }
-//
-//func (rt *Routes) UpdateQuestion(w http.ResponseWriter, r *http.Request) {
-//	id := r.FormValue("id")
-//	data := rt.utils.ParseFormCollection(r, "data")
-//
-//	response := map[string]bool{
-//		"status": false,
-//	}
-//
-//	_, err := rt.mongo.UpdateQuestion(data, id)
-//	if err != nil {
-//		fmt.Println(err)
-//	}else{
-//		response["status"] = true
-//	}
-//
-//	err = json.NewEncoder(w).Encode(response)
-//	if err != nil {
-//		fmt.Println(err)
-//	}
-//}
-//
-//func (rt *Routes) InsertQuestion(w http.ResponseWriter, r *http.Request) {
-//	question := Question{}
-//	question.Log = r.FormValue("Log")
-//	question.LogLast = r.FormValue("LogLast")
-//	question.SiteId = rt.utils.toInt(r.FormValue("SiteId"))
-//	question.Cat = r.FormValue("Cat")
-//	if r.FormValue("CatId") != "" {
-//		question.CatId, _ = primitive.ObjectIDFromHex(r.FormValue("CatId"))
-//	}
-//	question.TryCount = rt.utils.toInt(r.FormValue("TryCount"))
-//	question.ErrorsCount = rt.utils.toInt(r.FormValue("ErrorsCount"))
-//	question.Status = rt.utils.toInt(r.FormValue("status"))
-//	question.Error = r.FormValue("Error")
-//	question.ParserId = rt.utils.toInt(r.FormValue("ParserId"))
-//	question.Timeout = time.Now()
-//	question.Keyword = r.FormValue("Keyword")
-//	question.FastA = r.FormValue("FastA")
-//	question.FastLink = r.FormValue("FastLink")
-//	question.FastLinkTitle = r.FormValue("FastLinkTitle")
-//	question.FastDate = time.Now()
-//
-//	res, err := rt.mongo.InsertQuestion(question)
-//
-//	if err != nil {
-//		fmt.Println(err)
-//	}else{
-//		question.Id = res.InsertedID
-//
-//		err = json.NewEncoder(w).Encode(question)
-//		if err != nil {
-//			fmt.Println(err)
-//		}
-//	}
-//}
 
 func (rt *Routes) StartStreams(count int, limit int, cmd string) {
 	fmt.Println("Started")
@@ -288,10 +203,6 @@ func (rt *Routes) Run() {
 
 	r := mux.NewRouter()
 
-	//r.HandleFunc("/check/question", rt.CheckQuestion).Methods("POST")
-	//r.HandleFunc("/check/questions", rt.CheckQuestions).Methods("POST")
-	//r.HandleFunc("/update/question", rt.UpdateQuestion).Methods("POST")
-	//r.HandleFunc("/insert/question", rt.InsertQuestion).Methods("POST")
 	r.HandleFunc("/get/cats", rt.GetCats).Methods("POST")
 	r.HandleFunc("/get/task-stats", rt.GetTasksForStat).Methods("POST")
 	r.HandleFunc("/get/tasks", rt.GetTasks).Methods("POST")

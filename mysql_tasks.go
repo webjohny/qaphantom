@@ -28,13 +28,19 @@ func (m *MysqlDb) GetTasks(params map[string]interface{}) []MysqlTask {
 	//fmt.Println(task.ParseDate.String)
 	sqlQuery := "SELECT * FROM `tasks`"
 
+	if len(params) > 0{
+		if params["isStat"] != 0 {
+			sqlQuery = "SELECT id, site_id, cat_id, status FROM `tasks`"
+		}
+	}
 	sqlQuery = sqlQuery + " ORDER BY `id`"
 
 	if len(params) > 0{
 		if params["limit"] != 0 {
-			sqlQuery = sqlQuery + " LIMIT " + strconv.Itoa(params["limit"].(int))
 			if params["offset"] != 0 {
-				sqlQuery = sqlQuery + ", " + strconv.Itoa(params["offset"].(int))
+				sqlQuery = sqlQuery + "LIMIT " + strconv.Itoa(params["offset"].(int)) + ", " + strconv.Itoa(params["limit"].(int))
+			}else{
+				sqlQuery = sqlQuery + " LIMIT " + strconv.Itoa(params["limit"].(int))
 			}
 		}
 	}
@@ -76,7 +82,7 @@ func (m *MysqlDb) LoopCollectStats() {
 		for {
 			count := m.GetCountTasks(map[string]interface{}{})
 			fmt.Println(count)
-			if count < 10000 {
+			if count < 20000 {
 				break
 			}
 			m.CollectStats()
@@ -89,7 +95,7 @@ func (m *MysqlDb) LoopCollectStats() {
 func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 	params := make(map[string]interface{})
 
-	limit := 5000
+	limit := 20000
 	offset := 0
 	stat := map[int64]map[string]interface{}{}
 
@@ -113,6 +119,7 @@ func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 			params["limit"] = limit
 			params["offset"] = offset
 			params["isStat"] = true
+			//tasks := []MysqlTask{}
 			tasks := m.GetTasks(params)
 			if true {
 				for _, task := range tasks {
@@ -217,7 +224,7 @@ func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 			}
 		}
 
-		if count > 10000 {
+		if count > 20000 {
 			for k, v := range stat {
 				info, err := json.Marshal(v)
 				if err != nil {
@@ -228,7 +235,9 @@ func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 				}
 				res, err := m.UpdateSite(item, int(k))
 				fmt.Println(res)
-				fmt.Println(err)
+				if err != nil {
+					fmt.Println(err)
+				}
 			}
 		}
 	}

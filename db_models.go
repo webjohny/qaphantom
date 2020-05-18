@@ -54,7 +54,8 @@ type MysqlSite struct {
 	ShOrder sql.NullInt32 `db:"sh_order" json:"sh_order"`
 	ShFormat sql.NullInt32 `db:"sh_format" json:"sh_format"`
 	ImageSource int `db:"image_source" json:"image_source"`
-	Info sql.NullString `json:"info"`
+	Info sql.NullString `db:"info" json:"info"`
+	MoreTags sql.NullString `db:"more_tags" json:"more_tags"`
 }
 
 type MysqlCat struct {
@@ -67,6 +68,7 @@ type MysqlTask struct {
 	Id sql.NullInt64 `db:"id" json:"id"`
 	Log sql.NullString `db:"log" json:"log"`
 	LogLast sql.NullString `db:"log_last" json:"log_last"`
+	ParentId sql.NullInt64 `db:"parent_id" json:"parent_id"`
 	SiteId sql.NullInt64 `db:"site_id" json:"site_id"`
 	CatId sql.NullInt64 `db:"cat_id" json:"cat_id"`
 	TryCount sql.NullInt32 `db:"try_count" json:"try_count"`

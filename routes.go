@@ -134,7 +134,7 @@ func (rt *Routes) StartStreams(count int, limit int, cmd string) {
 func (rt *Routes) ReStartStreams(count int, limit int, cmd string) {
 	fmt.Println("Restarted streams")
 	rt.streams.StopAllWithoutClean()
-	time.Sleep(time.Minute * 5)
+	time.Sleep(time.Minute * 10)
 	rt.StartStreams(count, limit, cmd)
 }
 
@@ -158,7 +158,8 @@ func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
 		}else {
 			rt.ReStartStreams(count, limit, cmd)
 		}
-	}, 6200000, true)
+	}, 3600000, true)
+	//}, 60000, true)
 
 	rt.streams.isStarted = true
 	go rt.StartStreams(count, limit, cmd)

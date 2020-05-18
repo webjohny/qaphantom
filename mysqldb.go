@@ -4,6 +4,9 @@ import (
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
+	"log"
+	"os/exec"
+	"time"
 )
 
 type MysqlDb struct {
@@ -16,6 +19,8 @@ func (m *MysqlDb) CreateConnection() {
 	if err != nil {
 		panic(err)
 	}
+	conn.SetMaxIdleConns(100)
+	conn.SetMaxOpenConns(100)
 	fmt.Println("Connected to MysqlDB!")
 
 	m.db = conn
@@ -28,4 +33,12 @@ func (m *MysqlDb) Disconnect() {
 		panic(err)
 	}
 	fmt.Println("Connection to MySQL closed.")
+}
+
+func (m *MysqlDb) Restart() {
+	cmd := exec.Command("service", "mysql restart")
+	log.Printf("Mysql restarting and waiting for it to finish...")
+	err := cmd.Run()
+	log.Printf("Command finished with error: %v", err)
+	time.Sleep(time.Second * 5)
 }

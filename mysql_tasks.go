@@ -5,9 +5,79 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/rand"
 	"strconv"
 	"time"
 )
+
+var checkLoopCollect bool = false
+
+func ShuffleSites(sites []MysqlSite) {
+	for i := 1; i < len(sites); i++ {
+		r := rand.Intn(i + 1)
+		if i != r {
+			sites[r], sites[i] = sites[i], sites[r]
+		}
+	}
+}
+
+func (m *MysqlDb) GetFreeTask(ids []string) MysqlFreeTask {
+	var freeTask MysqlFreeTask
+	var sites []MysqlSite
+
+	freeTask.Mysql = m
+
+	sqlCount := "SELECT COUNT(*) FROM `tasks` WHERE `site_id` = s.id"
+	sqlSelectSite := "s.id, s.qsts_limit, s.more_tags, s.symb_micro_marking, s.language, s.theme, s.from, s.to, s.qa_count_from, s.qa_count_to, s.login, s.password, s.domain, s.h1, s.sh_format, s.sh_order, s.video_step, s.linking, s.parse_dates, s.parse_doubles, s.parse_fast, s.parse_search4, s.image_source, s.image_key, s.pub_image, (" + sqlCount + ") as count_rows"
+	sqlSite := "SELECT " + sqlSelectSite + " FROM sites s"
+
+	err := m.db.Select(&sites, sqlSite)
+	if err != nil{
+		fmt.Println(err)
+	}
+	ShuffleSites(sites)
+
+	var site MysqlSite
+	var siteId int64
+	var siteCountTasks int64
+	for _, item := range sites {
+		if item.CountRows.Int64 > 0 {
+			site = item
+			siteId = item.Id.Int64
+			siteCountTasks = item.CountRows.Int64
+			break
+		}
+	}
+
+	if siteId > 0 {
+		freeTask.MergeSite(site)
+
+		t := time.Now()
+		now := t.Format("2006-01-02 15:04:05")
+
+		randomOffset := int(siteCountTasks) - 1
+		randomOffset = rand.Intn(randomOffset)
+
+		sqlQuery := "SELECT t.id, t.keyword, t.try_count, c.title AS cat, t.site_id, t.cat_id FROM tasks t"
+		sqlQuery += " LEFT JOIN cats c ON (c.id = t.cat_id)"
+		sqlQuery += " WHERE t.site_id = "
+		sqlQuery += strconv.Itoa(int(siteId))
+		sqlQuery += " AND (t.try_count IS NULL OR t.try_count <= 5)"
+		sqlQuery += " AND (t.status IS NULL OR t.status = 0) AND (t.timeout is NULL OR t.timeout < '"
+		sqlQuery += now
+		sqlQuery += "') ORDER BY RAND() LIMIT 1"
+
+		var tasks []MysqlTask
+		err := m.db.Select(&tasks, sqlQuery)
+		if err != nil{
+			fmt.Println(err)
+		}
+		task := tasks[0]
+		freeTask.MergeTask(task)
+		freeTask.SavingAvailable = freeTask.QstsLimit > freeTask.CountRows
+	}
+	return freeTask
+}
 
 func (m *MysqlDb) GetCountTasks(params map[string]interface{}) int {
 	rows, _ := m.db.Query("SELECT COUNT(*) as count FROM `tasks`")
@@ -20,7 +90,6 @@ func (m *MysqlDb) GetCountTasks(params map[string]interface{}) int {
 	}
 	return count
 }
-
 
 func (m *MysqlDb) GetTasks(params map[string]interface{}) []MysqlTask {
 	var results []MysqlTask
@@ -53,18 +122,23 @@ func (m *MysqlDb) GetTasks(params map[string]interface{}) []MysqlTask {
 	return results
 }
 
-
-func (m *MysqlDb) InsertTask(question Question) {
-
-}
-
 func (m *MysqlDb) UpdateTask(data map[string]interface{}, id int) (sql.Result, error) {
 	sqlQuery := "UPDATE `tasks` SET "
 
 	if len(data) > 0 {
 		updateQuery := ""
-		for k, _ := range data {
-			updateQuery += "`" + k + "` = :" + k
+		i := 0
+		for k, v := range data {
+			if i > 0 {
+				updateQuery += ", "
+			}
+			updateQuery += "`" + k + "` = "
+			if v == "NULL" {
+				updateQuery += "NULL"
+			}else{
+				updateQuery += ":" + k
+			}
+			i++
 		}
 		sqlQuery += updateQuery
 	}
@@ -72,6 +146,48 @@ func (m *MysqlDb) UpdateTask(data map[string]interface{}, id int) (sql.Result, e
 	sqlQuery += " WHERE `id` = " + strconv.Itoa(id)
 
 	res, err := m.db.NamedExec(sqlQuery, data)
+
+	return res, err
+}
+
+func (m *MysqlDb) UpdateProxy(data map[string]interface{}, id int) (sql.Result, error) {
+	sqlQuery := "UPDATE `proxy` SET "
+
+	if len(data) > 0 {
+		updateQuery := ""
+		i := 0
+		for k, v := range data {
+			if i > 0 {
+				updateQuery += ", "
+			}
+			updateQuery += "`" + k + "` = "
+			if v == "NULL" {
+				updateQuery += "NULL"
+			}else{
+				updateQuery += ":" + k
+			}
+			i++
+		}
+		sqlQuery += updateQuery
+	}
+
+	sqlQuery += " WHERE `id` = " + strconv.Itoa(id)
+
+	res, err := m.db.NamedExec(sqlQuery, data)
+
+	return res, err
+}
+
+func (m *MysqlDb) AddTask(item map[string]string) (sql.Result, error) {
+	sqlQuery := "INSERT INTO `tasks` SET "
+	sqlQuery += "`site_id` = :site_id, " +
+		"`cat_id` = :cat_id, " +
+		"`keyword` = :keyword, " +
+		"`parent_id` = :parent_id, " +
+		"`parser` = NULL, " +
+		"`error` = NULL"
+
+	res, err := m.db.NamedExec(sqlQuery, item)
 
 	return res, err
 }
@@ -86,7 +202,7 @@ func (m *MysqlDb) LoopCollectStats() {
 				break
 			}
 			m.CollectStats()
-			time.Sleep(5 * time.Minute)
+			time.Sleep(2 * time.Minute)
 		}
 	}
 }
@@ -242,11 +358,4 @@ func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 		}
 	}
 	return stat
-}
-
-
-func (m *MysqlDb) GetFreeTask(ids []string) map[string]interface{} {
-	var result map[string]interface{}
-
-	return result
 }

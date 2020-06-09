@@ -1,0 +1,13 @@
+{
+  "Port": "{port}",
+  "ApiHost": "{apiHost}",
+  "ApiLink": "{apiLink}",
+  "ApiKey": "{apiKey}",
+  "ApiSecret": "{apiSecret}",
+  "MongoUrl": "{mongoUrl}",
+  "MongoDb": "{mongoDb}",
+  "MysqlHost": "{mysqlHost}",
+  "MysqlDb": "{mysqlDb}",
+  "MysqlLogin": "{mysqlLogin}",
+  "MysqlPass": "{mysqlPass}"
+}

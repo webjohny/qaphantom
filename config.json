@@ -1,5 +1,5 @@
 {
-  "Port": 8000,
+  "Port": "8000",
   "ApiHost": "http://45.84.225.29/",
   "ApiLink": "http://45.84.225.29/api",
   "ApiKey": "go-go-dance2020",
@@ -8,6 +8,6 @@
   "MongoDb": "phantom",
   "MysqlHost": "localhost:3306",
   "MysqlDb": "phantom",
-  "MysqlLogin": "phantom",
-  "MysqlPass": "sdfkJ&5sdf"
+  "MysqlLogin": "root",
+  "MysqlPass": ""
 }

@@ -2,7 +2,11 @@ package main
 
 import "time"
 
+var utils Utils
+
 func main() {
+	utils = Utils{}
+
 	conf := Configuration{}
 	conf.Create()
 

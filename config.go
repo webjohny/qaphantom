@@ -7,7 +7,7 @@ import (
 )
 
 type Configuration struct {
-	Port      int
+	Port      string
 	ApiHost   string
 	ApiLink   string
 	ApiKey    string

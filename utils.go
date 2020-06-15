@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/kennygrant/sanitize"
 	"log"
@@ -56,12 +55,12 @@ func (u *Utils) SetInterval(someFunc func(), milliseconds int, async bool) chan 
 
 func (u *Utils) ErrorHandler(err error) {
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 }
 
 func (u *Utils) SentenceSplit(str string) []string {
-	return u.PregSplit(str, `(?<=[.?!])\s+`)
+	return u.PregSplit(str, `([.?!])\s+`)
 }
 
 func (u *Utils) PregSplit(text string, delimeter string) []string {
@@ -82,9 +81,11 @@ func (u *Utils) YoutubeEmbed(str string) string {
 		str = strings.Replace(str, "youtube.com/watch?v=", "youtube.com/embed/", 1)
 	} else if strings.Contains(str, "youtu.be/") {
 		str = strings.Replace(str, "youtu.be/", "youtube.com/embed/", 1)
+	} else if strings.Contains(str, "/watch?v=") {
+		str = strings.Replace(str, "/watch?v=", "youtube.com/embed/", 1)
 	}
 	str = strings.Replace(str, "&", "?", 1)
-	return str
+	return `https://` + str
 }
 
 
@@ -122,7 +123,7 @@ func (u *Utils) StripTags(html string) string {
 	paaReader := strings.NewReader(html)
 	doc, err := goquery.NewDocumentFromReader(paaReader)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
 	return doc.Text()
@@ -135,7 +136,7 @@ func (u *Utils) RandBool() bool {
 func (u *Utils) ParseFormCollection(r *http.Request, typeName string) map[string]string {
 	result := make(map[string]string)
 	if err := r.ParseForm(); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 	for key, values := range r.Form {
 		re := regexp.MustCompile(typeName + "\\[(.+)\\]")

@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 )
@@ -17,7 +18,7 @@ func (m *MysqlDb) GetFreeProxy() MysqlProxy {
 
 	err := m.db.Select(&proxies, sqlQuery)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 
 	proxy := MysqlProxy{}
@@ -62,7 +63,7 @@ func (p MysqlProxy) SetTimeout(parser int) sql.Result {
 
 	res, err := p.Mysql.db.NamedExec(sqlQuery, data)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 
 	return res
@@ -75,6 +76,6 @@ func (p MysqlProxy) FreeProxy() {
 
 	_, err := p.Mysql.UpdateProxy(data, int(p.Id.Int64))
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }

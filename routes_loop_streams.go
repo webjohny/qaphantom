@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -45,7 +46,7 @@ func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
 		"status": true,
 	})
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }
 
@@ -57,7 +58,7 @@ func (rt *Routes) StopLoopStreams(w http.ResponseWriter, r *http.Request) {
 		"status": true,
 	})
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }
 

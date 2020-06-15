@@ -7,6 +7,7 @@ require (
 	github.com/abcdsxg/go-wordpress-xmlrpc v0.0.0-20180113101933-1a859c211621
 	github.com/chromedp/cdproto v0.0.0-20200116234248-4da64dd111ac
 	github.com/chromedp/chromedp v0.5.3
+	github.com/gabriel-vasile/mimetype v1.1.0
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gorilla/mux v1.7.4
 	github.com/gosimple/slug v1.9.0

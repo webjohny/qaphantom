@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"log"
 	"strconv"
 )
 
@@ -23,7 +24,7 @@ func (m *MysqlDb) GetCats(params map[string]interface{}, postData map[string]int
 
 	err := m.db.Select(&results, sqlQuery)
 	if err != nil {
-		panic(err)
+		log.Println(err)
 	}
 
 	return results

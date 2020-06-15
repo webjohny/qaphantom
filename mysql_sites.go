@@ -3,7 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
+	"log"
 	"strconv"
 )
 
@@ -35,7 +35,7 @@ func (m *MysqlDb) GetSites(params map[string]interface{}, postData map[string]in
 
 	err := m.db.Select(&results, sqlQuery)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 
 	return results

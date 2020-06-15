@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"strconv"
@@ -33,7 +34,7 @@ func (m *MysqlDb) GetFreeTask(ids []string) MysqlFreeTask {
 
 	err := m.db.Select(&sites, sqlSite)
 	if err != nil{
-		fmt.Println(err)
+		log.Println(err)
 	}
 	ShuffleSites(sites)
 
@@ -70,7 +71,7 @@ func (m *MysqlDb) GetFreeTask(ids []string) MysqlFreeTask {
 		var tasks []MysqlTask
 		err := m.db.Select(&tasks, sqlQuery)
 		if err != nil{
-			fmt.Println(err)
+			log.Println(err)
 		}
 		task := tasks[0]
 		freeTask.MergeTask(task)
@@ -85,7 +86,7 @@ func (m *MysqlDb) GetCountTasks(params map[string]interface{}) int {
 	for rows.Next() {
 		err := rows.Scan(&count)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 		}
 	}
 	return count
@@ -178,7 +179,7 @@ func (m *MysqlDb) UpdateProxy(data map[string]interface{}, id int) (sql.Result, 
 	return res, err
 }
 
-func (m *MysqlDb) AddTask(item map[string]string) (sql.Result, error) {
+func (m *MysqlDb) AddTask(item map[string]interface{}) (sql.Result, error) {
 	sqlQuery := "INSERT INTO `tasks` SET "
 	sqlQuery += "`site_id` = :site_id, " +
 		"`cat_id` = :cat_id, " +
@@ -344,7 +345,7 @@ func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 			for k, v := range stat {
 				info, err := json.Marshal(v)
 				if err != nil {
-					fmt.Println(err)
+					log.Println(err)
 				}
 				item := map[string]interface{}{
 					"info": info,
@@ -352,7 +353,7 @@ func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 				res, err := m.UpdateSite(item, int(k))
 				fmt.Println(res)
 				if err != nil {
-					fmt.Println(err)
+					log.Println(err)
 				}
 			}
 		}

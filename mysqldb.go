@@ -19,7 +19,8 @@ func (m *MysqlDb) CreateConnection() {
 	if err != nil {
 		panic(err)
 	}
-	conn.SetMaxIdleConns(100)
+	conn.SetMaxIdleConns(20)
+	conn.SetConnMaxLifetime(time.Minute * 2)
 	conn.SetMaxOpenConns(100)
 	fmt.Println("Connected to MysqlDB!")
 

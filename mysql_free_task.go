@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -66,7 +67,7 @@ func (t *MysqlFreeTask) SetFinished(status int, errorMsg string) {
 
 	_, err := t.Mysql.UpdateTask(data, t.Id)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }
 
@@ -89,7 +90,7 @@ func (t *MysqlFreeTask) FreeTask() {
 
 	_, err := t.Mysql.UpdateTask(data, t.Id)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }
 
@@ -110,11 +111,14 @@ func (t *MysqlFreeTask) SetTimeout(parser int) {
 
 	_, err := t.Mysql.UpdateTask(data, t.Id)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }
 
 func (t *MysqlFreeTask) SetError(error string) {
+	if error == "" {
+		return
+	}
 	now := time.Now().Local().Add(time.Minute * time.Duration(5))
 	formattedDate := now.Format("2006-01-02 15:04:05")
 	t.SetLog(error)
@@ -125,16 +129,20 @@ func (t *MysqlFreeTask) SetError(error string) {
 	data["error"] = error
 	data["status"] = 2
 	data["parser"] = ""
-	data["timeout"] = ""
+	data["timeout"] = "NULL"
 	data["parse_date"] = formattedDate
 
 	_, err := t.Mysql.UpdateTask(data, t.Id)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }
 
 func (t *MysqlFreeTask) SetLog(text string) {
+	if text == "" {
+		return
+	}
+	fmt.Println(text)
 	t.Log = append(t.Log, text)
 }
 

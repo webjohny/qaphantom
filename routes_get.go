@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,11 +19,11 @@ func (rt *Routes) GetFreeTask(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println(ids)
 
-	question := rt.mysql.GetFreeTask(ids)
+	question := mysql.GetFreeTask(ids)
 
 	err := json.NewEncoder(w).Encode(question)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }
 
@@ -41,26 +42,26 @@ func (rt *Routes) GetCats(w http.ResponseWriter, r *http.Request) {
 		postData["title"] = r.FormValue("title")
 	}
 
-	cats := rt.mysql.GetCats(params, postData)
+	cats := mysql.GetCats(params, postData)
 
 	err := json.NewEncoder(w).Encode(cats)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }
 
 func (rt *Routes) GetTasksForStat(w http.ResponseWriter, r *http.Request) {
 
-	count := rt.mysql.GetCountTasks(map[string]interface{}{})
+	count := mysql.GetCountTasks(map[string]interface{}{})
 
 	stat := map[int64]map[string]interface{}{}
 
-	//stat = rt.mysql.CollectStats()
+	//stat = mysql.CollectStats()
 
-	go rt.mysql.LoopCollectStats()
+	go mysql.LoopCollectStats()
 
 	if count > 10000 {
-		sites := rt.mysql.GetSites(map[string]interface{}{}, map[string]interface{}{})
+		sites := mysql.GetSites(map[string]interface{}{}, map[string]interface{}{})
 		if len(sites) > 0 {
 			for _, site := range sites {
 				info := site.GetInfo()
@@ -70,22 +71,22 @@ func (rt *Routes) GetTasksForStat(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}else{
-		stat = rt.mysql.CollectStats()
+		stat = mysql.CollectStats()
 	}
 
 	err := json.NewEncoder(w).Encode(stat)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }
 
 func (rt *Routes) GetTasks(w http.ResponseWriter, r *http.Request) {
 	params := make(map[string]interface{})
 
-	tasks := rt.mysql.GetTasks(params)
+	tasks := mysql.GetTasks(params)
 
 	err := json.NewEncoder(w).Encode(tasks)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }

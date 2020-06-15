@@ -3,29 +3,39 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os/exec"
 	"time"
 )
 
 type Stream struct {
 	state bool
+	job JobHandler
 	cmd string
 	ctxTimer context.Context
 	cancelTimer context.CancelFunc
 }
 
-func (s *Stream) StartTaskTimer(cmd string, limit int64) bool {
+func (s *Stream) StartTaskTimer(streamId int, limit int64) bool {
 	var status bool = true
+	cmd := s.cmd
 
 	s.ctxTimer, s.cancelTimer = context.WithTimeout(context.Background(), time.Duration(1000 * limit) * time.Millisecond)
 	defer s.cancelTimer()
 
-	//php -f /var/www/html/cron.php parser cron sleeping 5
-	_, err := exec.CommandContext(s.ctxTimer, "bash", "-c", cmd).Output()
+	var err error
+	if cmd != "" {
+		//php -f /var/www/html/cron.php parser cron sleeping 5
+		_, err = exec.CommandContext(s.ctxTimer, "bash", "-c", cmd).Output()
+	} else {
+		fmt.Println("Start job")
+		s.job.IsStart = true
+		s.job.Run(streamId)
+	}
 
 	if err != nil {
 		status = false
-		fmt.Println(err)
+		log.Println(err)
 	}
 
 	return status
@@ -42,7 +52,7 @@ func (s *Stream) Start(streamId int, limit int64) {
 		}
 
 		fmt.Println("Start stream #", streamId, s.cmd)
-		s.StartTaskTimer(s.cmd, limit)
+		s.StartTaskTimer(streamId, limit)
 		fmt.Println("End stream #", streamId, time.Second*15)
 
 		time.Sleep(time.Second * 15)
@@ -53,6 +63,10 @@ func (s *Stream) Stop() {
 	s.state = false
 	if s.cancelTimer != nil {
 		s.cancelTimer()
+	}
+	if s.job.IsStart {
+		s.job.CancelJob()
+		s.job.IsStart = false
 	}
 }
 

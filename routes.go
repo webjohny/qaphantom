@@ -28,13 +28,14 @@ func (rt *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stream := Stream{}
-	status := stream.StartTaskTimer(commandExec, limit)
+	stream.cmd = commandExec
+	status := stream.StartTaskTimer(500, limit)
 
 	err := json.NewEncoder(w).Encode(map[string]bool{
 		"status": status,
 	})
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }
 
@@ -42,7 +43,11 @@ func (rt *Routes) StartStreams(count int, limit int, cmd string) {
 	fmt.Println("Started")
 	for i := 1; i <= count; i++ {
 		stream := rt.streams.Add(i)
-		stream.cmd = cmd + " " + strconv.Itoa(i)
+		if cmd != "" {
+			stream.cmd = cmd + " " + strconv.Itoa(i)
+		}else{
+			stream.job = JobHandler{}
+		}
 		go stream.Start(i, int64(limit*1000))
 	}
 }
@@ -67,7 +72,7 @@ func (rt *Routes) Run() {
 	r.HandleFunc("/loop-streams/start", rt.StartLoopStreams).Methods("POST")
 	r.HandleFunc("/loop-streams/stop", rt.StopLoopStreams).Methods("GET")
 
-	r.HandleFunc("/run/job", rt.RunJob).Methods("GET")
+	//r.HandleFunc("/run/job", rt.RunJob).Methods("GET")
 	r.HandleFunc("/stream/stop", rt.StopStream).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(":" + rt.conf.Port, r))

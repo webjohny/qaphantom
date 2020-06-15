@@ -2,7 +2,10 @@ package main
 
 import "time"
 
-var utils Utils
+var (
+	utils Utils
+	mysql MysqlDb
+)
 
 func main() {
 	utils = Utils{}
@@ -11,18 +14,22 @@ func main() {
 	conf.Create()
 
 	// Connect to MysqlDB
-	mysqlDb := MysqlDb{
+	mysql = MysqlDb{
 		conf: conf,
 	}
-	mysqlDb.CreateConnection()
+	mysql.CreateConnection()
 
 	// Run routes
 	routes := Routes{
-		mysql: mysqlDb,
+		mysql: mysql,
 		conf: conf,
 		streams: Streams{},
 	}
 
+	//job := JobHandler{}
+	//job.Run(0)
+
 	routes.Run()
+
 	time.Sleep(time.Minute)
 }

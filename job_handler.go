@@ -115,9 +115,19 @@ func (j *JobHandler) InitBrowser() bool {
 }
 
 func (j *JobHandler) CancelJob() () {
-	j.CancelBrowser()
-	j.CancelLogger()
-	j.CancelTimeout()
+	if j.CancelBrowser != nil {
+		j.CancelBrowser()
+	}
+	if j.CancelLogger != nil {
+		j.CancelLogger()
+	}
+	if j.CancelTimeout != nil {
+		j.CancelTimeout()
+	}
+}
+
+func (j *JobHandler) OpenPaa() () {
+
 }
 
 func (j *JobHandler) Run(parser int) (status bool, msg string) {
@@ -150,7 +160,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	task.SetTimeout(parser)
 
 	stats := QaStats{}
-	stats.Qac = task.QaCountFrom + task.QaCountTo
+	stats.Wqc = task.QaCountFrom + task.QaCountTo
 
 	if task.From != 0 && task.To != 0 {
 		stats.Size = rand.Intn((task.To - task.From) + task.From)
@@ -174,39 +184,51 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		proxy.SetTimeout(parser)
 
 		j.InitBrowser()
+
 		// Запускаемся
-		j.Task.SetLog("Запускаем браузер (попытка №" + strconv.Itoa(i) + ")")
+		task.SetLog("Открываем страницу (попытка №" + strconv.Itoa(i) + "): https://www.google.com/search?hl=en&q=" + url.QueryEscape(task.Keyword))
+
+		duration := int64(rand.Intn(15))
+		time.Sleep(time.Second * time.Duration(duration))
 
 		if err := chromedp.Run(j.Ctx,
 			// Устанавливаем страницу для парсинга
 			chromedp.Navigate("https://www.google.com/search?hl=en&q=" + task.Keyword),
-			chromedp.WaitVisible("#search", chromedp.ByID),
+			chromedp.WaitVisible("body", chromedp.ByQuery),
 			// Вытащить html на проверку каптчи
-			chromedp.OuterHTML("#search", &searchHtml, chromedp.ByID),
+			chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
 		); err != nil {
 			j.CancelJob()
-			j.Task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась.")
+			task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась.")
 			log.Println(err)
 		}else{
-			task.SetLog("Открываем страницу: https://www.google.com/search?hl=en&q=" + url.QueryEscape(task.Keyword))
 			break
 		}
 	}
 
 	defer j.CancelJob()
 
-	j.SearchHtml = searchHtml
-	if searchHtml == "" || !j.CheckPaa() {
-		task.SetLog("Отсутствует PAA.")
-		return false, "PAA не загрузился"
+	if j.CheckCaptcha(searchHtml) {
+		task.SetError("Отсутствует PAA. Есть каптча...")
+		proxy.FreeProxy()
+		utils.ErrorHandler(chromedp.Cancel(j.Ctx))
+		return false, "Отсутствует PAA. Есть каптча..."
+	}
+
+	if searchHtml == "" || !j.CheckPaa(searchHtml) {
+		task.SetError("Отсутствует PAA.")
+		proxy.FreeProxy()
+		utils.ErrorHandler(chromedp.Cancel(j.Ctx))
+		return false, "Отсутствует PAA."
 	}
 
 	task.SetLog("Блоки загружены")
 	task.SetLog("Начинаем обработку PAA")
 
 	// Загружаем HTML документ в GoQuery пакет который организует облегчённую работу с HTML селекторами
-	j.SetFastAnswer()
+	j.SetFastAnswer(searchHtml)
 
+	searchHtml = ""
 	if err := chromedp.Run(j.Ctx,
 		// Кликаем сразу на первый вопрос
 		chromedp.Click(".related-question-pair:first-child .cbphWd"),
@@ -303,7 +325,14 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	if task.ParseSearch4 < 1 {
 		qaTotalPage := QaTotalPage{}
 		wp := Wordpress{}
-		wp.Connect(`https://vanguarddentalclinics.com/xmlrpc2.php`, `Jekyll1911`, `ghjcnjgfhjkm`, 1)
+		wp.Connect(`https://` + task.Domain + `/xmlrpc2.php`, task.Login, task.Password, 1)
+		if !wp.CheckConn() {
+			task.SetError("Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")")
+			task.SetError(wp.err.Error())
+			proxy.FreeProxy()
+			utils.ErrorHandler(chromedp.Cancel(j.Ctx))
+			return false, "Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")"
+		}
 
 		list := "ol"
 		lists := map[string]string{"ul": "ol", "ol": "ul"}
@@ -645,7 +674,10 @@ func (j *JobHandler) GetProxyScheme() string {
 		return ""
 	}
 	proxyAddr := j.Proxy.Host.String + ":" + j.Proxy.Port.String //127.0.0.1:1080
-	return fmt.Sprintf("%s%s:%s@%s", "http://", j.Proxy.Login.String, j.Proxy.Password.String, proxyAddr)
+	if j.Proxy.Login.String != "" && j.Proxy.Password.String != "" {
+		return fmt.Sprintf("%s:%s@%s", j.Proxy.Login.String, j.Proxy.Password.String, proxyAddr)
+	}
+	return proxyAddr
 }
 
 func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
@@ -733,8 +765,8 @@ func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 	return settings
 }
 
-func (j *JobHandler) SetFastAnswer() {
-	htmlReader := strings.NewReader(j.SearchHtml)
+func (j *JobHandler) SetFastAnswer(html string) {
+	htmlReader := strings.NewReader(html)
 	doc, err := goquery.NewDocumentFromReader(htmlReader)
 	if err != nil {
 		log.Println(err)
@@ -747,6 +779,10 @@ func (j *JobHandler) SetFastAnswer() {
 	}
 }
 
-func (j *JobHandler) CheckPaa() bool {
-	return strings.Contains(j.SearchHtml,"JolIg") && strings.Contains(j.SearchHtml,"related-question-pair")
+func (j *JobHandler) CheckPaa(html string) bool {
+	return strings.Contains(html,"JolIg") && strings.Contains(html,"related-question-pair")
+}
+
+func (j *JobHandler) CheckCaptcha(html string) bool {
+	return strings.Contains(html,"g-recaptcha") && strings.Contains(html,"data-sitekey")
 }

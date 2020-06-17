@@ -43,7 +43,9 @@ func (w *Wordpress) Connect(url string, username string, password string, blogId
 		password,
 	})
 	if err != nil {
+		w.err = err
 		log.Println(err)
+		return nil
 	}
 	w.client = c
 	w.cnf = []interface{}{
@@ -103,6 +105,7 @@ func (w *Wordpress) GetCats() []WpCat {
 		w.cnf, "category",
 	), &result)
 	if err != nil {
+		w.err = err
 		log.Println(err)
 	}
 	res := result.([]interface{})
@@ -140,6 +143,7 @@ func (w *Wordpress) NewTerm(name string, taxonomy string, slug string, descripti
 	), &result)
 	if err != nil {
 		w.err = err
+		return 0
 	}
 
 	return result.(int)
@@ -152,6 +156,8 @@ func (w *Wordpress) GetPost(id int) WpPost {
 	), &result)
 	if err != nil {
 		log.Println(err)
+		w.err = err
+		return WpPost{}
 	}
 	res := result.(map[string]interface{})
 	post := w.PreparePost(res)
@@ -173,6 +179,8 @@ func (w *Wordpress) EditPost(id int, title string, content string) bool {
 	), &result)
 	if err != nil {
 		log.Println(err)
+		w.err = err
+		return false
 	}
 	return result.(bool)
 }
@@ -204,10 +212,15 @@ func (w *Wordpress) NewPost(title string, content string, catId int, photoId int
 	), &result)
 	if err != nil {
 		w.err = err
+		return 0
 	}
 
 	id, _ := strconv.Atoi(result.(string))
 	return id
+}
+
+func (w *Wordpress) CheckConn() bool {
+	return w.client != nil
 }
 
 func (w *Wordpress) UploadFile(name string, mime string, bits string, overwrite string, postId int) map[string]interface{} {
@@ -229,6 +242,8 @@ func (w *Wordpress) UploadFile(name string, mime string, bits string, overwrite 
 	), &result)
 	if err != nil {
 		log.Println(err)
+		w.err = err
+		return result
 	}
 
 	return result

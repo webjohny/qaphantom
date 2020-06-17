@@ -5,7 +5,9 @@ import (
 )
 
 func (rt *Routes) RunJob(w http.ResponseWriter, r *http.Request) {
-
+	job := JobHandler{}
+	job.IsStart = true
+	job.Run(0)
 	//htmlString := "<div class=\"mod\" data-md=\"83\"><!--m--><div class=\"di3YZe\"><div class=\"co8aDb gsrt\" aria-level=\"3\" role=\"heading\"><b>More specifically they must have:</b></div><div class=\"RqBzHd\"><ul class=\"i8Z77e\"><li class=\"TrT0Xe\">An excellent knowledge of and interest in science, particularly the science of oral health.</li><li class=\"TrT0Xe\">Good eyesight.</li><li class=\"TrT0Xe\">Good manual dexterity and a steady hand.</li><li class=\"TrT0Xe\">The ability to concentrate for long periods of time.</li><li class=\"TrT0Xe\">The ability to use specialist equipment.</li></ul><div class=\"ZGh7Vc\"><a class=\"truncation-information\" href=\"https://myjobsearch.com/careers/dentist.html\" data-ved=\"2ahUKEwi4o77Mp-fpAhXXvosKHc_2D1UQnLoEMAR6BAgfEBI\" ping=\"/url?sa=t&amp;source=web&amp;rct=j&amp;url=https://myjobsearch.com/careers/dentist.html&amp;ved=2ahUKEwi4o77Mp-fpAhXXvosKHc_2D1UQnLoEMAR6BAgfEBI\" target=\"_blank\" rel=\"noopener\">Ещё</a></div></div></div><!--n--></div>"
 	//qa := QaParsing{}
 	//qa.Format(htmlString)

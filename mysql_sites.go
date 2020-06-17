@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"strconv"
 )
@@ -10,8 +11,10 @@ import (
 func (s *MysqlSite) GetInfo() map[string]interface{} {
 	var result map[string]interface{}
 
-	if err := json.Unmarshal([]byte(s.Info.String), &result); err != nil {
-		panic(err)
+	if s.Info.String != "" && s.Info.String != "[]" {
+		if err := json.Unmarshal([]byte(s.Info.String), &result); err != nil {
+			fmt.Println(err)
+		}
 	}
 	return result
 }

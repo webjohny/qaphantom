@@ -72,7 +72,7 @@ func (rt *Routes) Run() {
 	r.HandleFunc("/loop-streams/start", rt.StartLoopStreams).Methods("POST")
 	r.HandleFunc("/loop-streams/stop", rt.StopLoopStreams).Methods("GET")
 
-	//r.HandleFunc("/run/job", rt.RunJob).Methods("GET")
+	r.HandleFunc("/run/job", rt.RunJob).Methods("GET")
 	r.HandleFunc("/stream/stop", rt.StopStream).Methods("POST")
 
 	log.Fatal(http.ListenAndServe(":" + rt.conf.Port, r))

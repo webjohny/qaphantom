@@ -15,6 +15,7 @@ require (
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/kennygrant/sanitize v1.2.4
 	github.com/kolo/xmlrpc v0.0.0-20200310150728-e0350524596b // indirect
+	github.com/nuveo/anticaptcha v0.0.0-20190826134530-79fc5eb9f34a // indirect
 	github.com/ompluscator/dynamic-struct v1.2.0 // indirect
 	github.com/webjohny/go-wordpress-xmlrpc v0.0.0-20200609102214-7127d941bde2
 	go.mongodb.org/mongo-driver v1.3.1

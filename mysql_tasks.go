@@ -57,6 +57,9 @@ func (m *MysqlDb) GetFreeTask(ids []string) MysqlFreeTask {
 		now := t.Format("2006-01-02 15:04:05")
 
 		randomOffset := int(siteCountTasks) - 1
+		if randomOffset < 1 {
+			return freeTask
+		}
 		randomOffset = rand.Intn(randomOffset)
 
 		sqlQuery := "SELECT t.id, t.keyword, t.try_count, c.title AS cat, t.site_id, t.cat_id FROM tasks t"

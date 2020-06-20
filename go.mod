@@ -8,6 +8,7 @@ require (
 	github.com/chromedp/cdproto v0.0.0-20200608134039-8a80cdaf865c
 	github.com/chromedp/chromedp v0.5.3
 	github.com/chromedp/chromedp-proxy v0.0.0-20200612221528-43e36355835c // indirect
+	github.com/cssivision/reverseproxy v0.0.1
 	github.com/elazarl/goproxy v0.0.0-20200426045556-49ad98f6dac1
 	github.com/gabriel-vasile/mimetype v1.1.0
 	github.com/go-sql-driver/mysql v1.5.0
@@ -25,4 +26,5 @@ require (
 	go.mongodb.org/mongo-driver v1.3.1
 	golang.org/x/net v0.0.0-20200602114024-627f9648deb9
 	golang.org/x/sys v0.0.0-20200615200032-f1bc736245b1 // indirect
+	gopkg.in/elazarl/goproxy.v1 v1.0.0-20180725130230-947c36da3153
 )

@@ -13,6 +13,8 @@ github.com/chromedp/chromedp v0.5.3 h1:F9LafxmYpsQhWQBdCs+6Sret1zzeeFyHS5LkRF//F
 github.com/chromedp/chromedp v0.5.3/go.mod h1:YLdPtndaHQ4rCpSpBG+IPpy9JvX0VD+7aaLxYgYj28w=
 github.com/chromedp/chromedp-proxy v0.0.0-20200612221528-43e36355835c h1:DqrlIFh7LtOetjGrpNDPjEa24uqWzomDX4qO6B0wSGc=
 github.com/chromedp/chromedp-proxy v0.0.0-20200612221528-43e36355835c/go.mod h1:iRNzOlHqW5mC/pXtkof19+n0MqK8iJT6lhxigmOSzXs=
+github.com/cssivision/reverseproxy v0.0.1 h1:IvhNE3XITZOWFhON2faKbrDeGpqa+yfessLQKSSt15U=
+github.com/cssivision/reverseproxy v0.0.1/go.mod h1:+QTeWrlVNQDAiB3pnaecTCk5rh1sS3cJltUl/+L2APg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/elazarl/goproxy v0.0.0-20200426045556-49ad98f6dac1 h1:TEmChtx8+IeOghiySC8kQIr0JZOdKUmRmmkuRDuYs3E=
@@ -170,5 +172,7 @@ golang.org/x/tools v0.0.0-20190420181800-aa740d480789/go.mod h1:LCzVGOaR6xXOjkQ3
 golang.org/x/tools v0.0.0-20190531172133-b3315ee88b7d/go.mod h1:/rFqwRUd4F7ZHNgwSSTFct+R/Kf4OFW1sUzUTQQTgfc=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+gopkg.in/elazarl/goproxy.v1 v1.0.0-20180725130230-947c36da3153 h1:i2sumy6EgvN2dbX7HPhoDc7hLyoym3OYdU5HlvUUrpE=
+gopkg.in/elazarl/goproxy.v1 v1.0.0-20180725130230-947c36da3153/go.mod h1:xzjpkyedLMz3EXUTBbkRuuGPsxfsBX3Sy7J6kC9Gvoc=
 gopkg.in/errgo.v2 v2.1.0/go.mod h1:hNsd1EY+bozCKY1Ytp96fpM3vjJbqLJn88ws8XvfDNI=
 gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=

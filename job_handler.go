@@ -94,26 +94,18 @@ type QaImageResult struct {
 	ShortLink string
 }
 
-func (j *JobHandler) getProxyScheme() string {
-	if !j.Proxy.Host.Valid{
-		return ""
-	}
-	fmt.Println(j.Proxy)
-	proxyAddr := j.Proxy.Host.String + ":" + j.Proxy.Port.String //127.0.0.1:1080
-	return proxyAddr
-}
-
 func (j *JobHandler) InitBrowser() bool {
-	proxyScheme := j.getProxyScheme()
+	//proxy := Proxy{}
+	//proxyScheme := proxy.NetProxy()
 
 	opts := append(
 		chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.DisableGPU,
 		chromedp.NoSandbox,
-		chromedp.ExecPath(`C:\Program Files\Chrome\chrome.exe`),
 		chromedp.Flag("headless", false),
 		chromedp.Flag("ignore-certificate-errors", true),
 	)
+	proxyScheme := "45.84.225.29:9000"
 
 	if proxyScheme != "" {
 		j.Task.SetLog("Подключаем прокси к браузеру (" + proxyScheme + ")")
@@ -124,38 +116,23 @@ func (j *JobHandler) InitBrowser() bool {
 	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	j.CancelBrowser = cancel
 
-	// new browser, first tab
-	ctx1, cancel := chromedp.NewContext(allocCtx, chromedp.WithDebugf(log.Printf), chromedp.WithErrorf(log.Printf))
+	// Устанавливаем собственный logger
+	taskCtx, cancel := chromedp.NewContext(allocCtx)
+	j.CancelLogger = cancel
 
-	// ensure the first tab is created
-	if err := chromedp.Run(ctx1); err != nil {
-		panic(err)
-	}
+	// Ставим таймер на отключение если зависнет
+	taskCtx, cancel = context.WithTimeout(taskCtx, 30*time.Second)
+	j.CancelTimeout = cancel
 
-	// same browser, second tab
-	ctx2, _ := chromedp.NewContext(ctx1)
+	j.ctx = taskCtx
 
-	// ensure the second tab is created
-	if err := chromedp.Run(ctx2); err != nil {
-		panic(err)
-	}
-
-	j.ctx = ctx2
-
-	if err := chromedp.Run(ctx2,
+	if err := chromedp.Run(taskCtx,
 		network.Enable(),
 		performance.Enable(),
 		page.SetLifecycleEventsEnabled(true),
 		security.SetIgnoreCertificateErrors(true),
 		emulation.SetTouchEmulationEnabled(false),
 		network.SetCacheDisabled(true),
-		fetch.Enable().WithPatterns([]*fetch.RequestPattern{{"*", "", ""}}).WithHandleAuthRequests(true),
-		chromedp.ActionFunc(func (ctx context.Context) error {
-			//var err error
-			j.ListenForNetworkEvent(ctx)
-			j.taskCtx = ctx
-			return nil
-		}),
 	); err != nil {
 		log.Println(err)
 		return false
@@ -178,35 +155,6 @@ func (j *JobHandler) CancelJob() () {
 
 func (j *JobHandler) OpenPaa() () {
 
-}
-
-func (j *JobHandler) ListenForNetworkEvent(ctx context.Context) {
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
-		//fmt.Println(reflect.TypeOf(ev))
-		//res, _ := json.Marshal(ev)
-		//fmt.Println(string(res))
-		switch ev := ev.(type) {
-
-		case *fetch.EventAuthRequired:
-			fmt.Println("*fetch.EventAuthRequired", ev.RequestID)
-
-		case *network.EventRequestWillBeSent:
-			j.networkRequestID = ev.RequestID
-
-		case *fetch.EventRequestPaused:
-			j.interceptionID = ev.RequestID
-			c := chromedp.FromContext(ctx)
-
-			params := fetch.ContinueRequestParams{}
-			params.RequestID = j.interceptionID
-
-			fmt.Println(c.Target.Execute(ctx, "Fetch.continueRequest", params, nil))
-
-			err := fetch.ContinueRequest(j.interceptionID).Do(ctx)
-			fmt.Println(err)
-		}
-		// other needed network Event
-	})
 }
 
 func (j *JobHandler) Run(parser int) (status bool, msg string) {
@@ -272,10 +220,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		if err := chromedp.Run(j.ctx,
 			// Устанавливаем страницу для парсинга
+			chromedp.Navigate("https://myip.ru/"),
 			chromedp.ActionFunc(func (ctx context.Context) error {
-				frameId, loaderId, text, err := page.Navigate("https://myip.ru/").Do(ctx)
-				fmt.Println(frameId, loaderId, text, err)
-
 
 				//fmt.Println(j.RequestID)
 				//err = fetch.ContinueRequest().Do(ctx)
@@ -307,7 +253,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			break
 		}
 	}
-	time.Sleep(time.Second * 60)
 
 	defer j.CancelJob()
 

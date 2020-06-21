@@ -2,9 +2,7 @@ package main
 
 import (
 	"database/sql"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"strconv"
 	"time"
 )
@@ -31,25 +29,6 @@ func (p *Proxy) NewProxy() {
 	p.Login = proxy.Login.String
 	p.Password = proxy.Password.String
 	p.LocalIp = p.Host + ":" + p.Port
-	if false {
-	//if proxy.Id.Valid {
-		proxyUrl := p.Host + ":" + p.Password
-		if p.Login != "" && p.Password != "" {
-			res, err := http.Get(conf.ProxyApi + "/create?host=" + p.Host + "&port=" + p.Port + "&login=" + p.Login + "&pass=" + p.Password)
-			if err != nil {
-				log.Println(err)
-			}
-			proxyUrlByte, err := ioutil.ReadAll(res.Body)
-			proxyUrl = string(proxyUrlByte)
-
-			err = res.Body.Close()
-			if err != nil {
-				log.Println(err)
-			}
-			p.LocalIp = proxyUrl
-		}
-		p.Ip = proxyUrl
-	}
 }
 
 func (p Proxy) SetTimeout(parser int) sql.Result {
@@ -91,19 +70,6 @@ func (p Proxy) SetTimeout(parser int) sql.Result {
 }
 
 func (p Proxy) FreeProxy() {
-	if p.LocalIp != "" {
-		res, err := http.Get(conf.ProxyApi + "/create?url=" + p.LocalIp)
-		if err != nil {
-			log.Println(err)
-		}
-		_, err = ioutil.ReadAll(res.Body)
-		//output := string(outputByte)
-
-		err = res.Body.Close()
-		if err != nil {
-			log.Println(err)
-		}
-	}
 	data := map[string]interface{}{}
 	data["parser"] = "NULL"
 	data["timeout"] = "NULL"

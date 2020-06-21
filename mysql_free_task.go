@@ -65,7 +65,7 @@ func (t *MysqlFreeTask) SetFinished(status int, errorMsg string) {
 	data["timeout"] = "NULL"
 	data["parse_date"] = formattedDate
 
-	_, err := t.Mysql.UpdateTask(data, t.Id)
+	_, err := mysql.UpdateTask(data, t.Id)
 	if err != nil {
 		log.Println(err)
 	}
@@ -88,7 +88,7 @@ func (t *MysqlFreeTask) FreeTask() {
 	data["timeout"] = "NULL"
 	data["try_count"] = t.TryCount
 
-	_, err := t.Mysql.UpdateTask(data, t.Id)
+	_, err := mysql.UpdateTask(data, t.Id)
 	if err != nil {
 		log.Println(err)
 	}
@@ -109,7 +109,7 @@ func (t *MysqlFreeTask) SetTimeout(parser int) {
 	data["parser"] = strconv.Itoa(parser)
 	data["timeout"] = formattedDate
 
-	_, err := t.Mysql.UpdateTask(data, t.Id)
+	_, err := mysql.UpdateTask(data, t.Id)
 	if err != nil {
 		log.Println(err)
 	}
@@ -132,7 +132,7 @@ func (t *MysqlFreeTask) SetError(error string) {
 	data["timeout"] = "NULL"
 	data["parse_date"] = formattedDate
 
-	_, err := t.Mysql.UpdateTask(data, t.Id)
+	_, err := mysql.UpdateTask(data, t.Id)
 	if err != nil {
 		log.Println(err)
 	}

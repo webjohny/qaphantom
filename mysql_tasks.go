@@ -142,6 +142,7 @@ func (m *MysqlDb) UpdateTask(data map[string]interface{}, id int) (sql.Result, e
 			}else{
 				updateQuery += ":" + k
 			}
+			//data[k] = utils.MysqlRealEscapeString(v.(string))
 			i++
 		}
 		sqlQuery += updateQuery

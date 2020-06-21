@@ -41,7 +41,7 @@ type JobHandler struct {
 	CancelLogger context.CancelFunc
 
 	proxy Proxy
-	
+
 	interceptionID fetch.RequestID
 	networkRequestID network.RequestID
 	targetID target.ID
@@ -103,7 +103,7 @@ func (j *JobHandler) InitBrowser() bool {
 		chromedtp.DefaultExecAllocatorOptions[:],
 		chromedtp.DisableGPU,
 		chromedtp.NoSandbox,
-		chromedtp.Flag("headless", false),
+		//chromedtp.Flag("headless", false),
 		chromedtp.Flag("ignore-certificate-errors", true),
 	)
 
@@ -117,6 +117,7 @@ func (j *JobHandler) InitBrowser() bool {
 	j.CancelBrowser = cancel
 
 	// Устанавливаем собственный logger
+	//, chromedtp.WithDebugf(log.Printf)
 	taskCtx, cancel := chromedtp.NewContext(allocCtx)
 	j.CancelLogger = cancel
 
@@ -141,9 +142,14 @@ func (j *JobHandler) InitBrowser() bool {
 		security.SetIgnoreCertificateErrors(true),
 		emulation.SetTouchEmulationEnabled(false),
 		network.SetCacheDisabled(true),
-		fetchEnabled,
 		chromedtp.ActionFunc(func (ctx context.Context) error {
-			j.ListenForNetworkEvent(ctx)
+			if j.proxy.Login != "" && j.proxy.Password != "" {
+				err := fetchEnabled.Do(ctx)
+				if err != nil {
+					fmt.Println("Fetch.enable", err)
+				}
+				j.ListenForNetworkEvent(ctx)
+			}
 			return nil
 		}),
 	); err != nil {
@@ -171,11 +177,12 @@ func (j *JobHandler) OpenPaa() () {
 }
 
 func (j *JobHandler) ListenForNetworkEvent(ctx context.Context) {
+	c := chromedtp.FromContext(ctx)
+	id := 5000
 	chromedtp.ListenTarget(ctx, func(ev interface{}) {
 		switch ev := ev.(type) {
 
 		case *fetch.EventAuthRequired:
-			c := chromedtp.FromContext(ctx)
 			buf, _ := json.Marshal(map[string]interface{}{
 				"requestId": ev.RequestID.String(),
 				"authChallengeResponse": map[string]string{
@@ -185,26 +192,32 @@ func (j *JobHandler) ListenForNetworkEvent(ctx context.Context) {
 				},
 			})
 			cmd := &cdproto.Message{
-				ID:        20,
+				ID:        int64(id + 1),
 				SessionID: c.Target.SessionID,
 				Method:    cdproto.MethodType("Fetch.continueWithAuth"),
 				Params:    buf,
 			}
 			err := c.Browser.Conn.Write(ctx, cmd)
-			fmt.Println("fetch.EventAuthRequired", err)
+			if err != nil {
+				fmt.Println("Fetch.continueWithAuth", err)
+			}
+
+		case *network.EventRequestWillBeSent:
+			j.networkRequestID = ev.RequestID
 
 		case *fetch.EventRequestPaused:
 			j.interceptionID = ev.RequestID
-			c := chromedtp.FromContext(ctx)
 			buf, _ := json.Marshal(map[string]string{"requestId":ev.RequestID.String()})
 			cmd := &cdproto.Message{
-				ID:        20,
+				ID:        int64(id + 1),
 				SessionID: c.Target.SessionID,
 				Method:    cdproto.MethodType("Fetch.continueRequest"),
 				Params:    buf,
 			}
 			err := c.Browser.Conn.Write(ctx, cmd)
-			fmt.Println("fetch.EventRequestPaused", err)
+			if err != nil {
+				fmt.Println("Fetch.continueRequest", err)
+			}
 		}
 	})
 }
@@ -270,12 +283,12 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		if err := chromedtp.Run(j.ctx,
 			// Устанавливаем страницу для парсинга
+			//chromedtp.Navigate("https://myip.ru"),
 			chromedtp.Navigate("https://www.google.com/search?hl=en&q=" + task.Keyword),
 			chromedtp.WaitVisible("body", chromedtp.ByQuery),
 			// Вытащить html на проверку каптчи
 			chromedtp.OuterHTML("body", &searchHtml, chromedtp.ByQuery),
 		); err != nil {
-			//j.CancelJob()
 			task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась.")
 			log.Println(err)
 		}else{
@@ -742,6 +755,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	task.SetFinished(1, "")
 	j.proxy.FreeProxy()
 	fmt.Println(taskId)
+	utils.ErrorHandler(chromedtp.Cancel(j.ctx))
 
 	return true, "Задача #" + strconv.Itoa(taskId) + " была успешно выполнена"
 }

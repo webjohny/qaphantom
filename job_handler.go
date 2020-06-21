@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/chromedp/cdproto"
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/fetch"
@@ -23,13 +24,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/chromedp/chromedp"
 	"github.com/gosimple/slug"
+	"github.com/webjohny/chromedtp"
 )
 
 type JobHandler struct {
 	Task MysqlFreeTask
-	Proxy MysqlProxy
 
 	NumberInits int
 	SearchHtml string
@@ -40,6 +40,8 @@ type JobHandler struct {
 	CancelTimeout context.CancelFunc
 	CancelLogger context.CancelFunc
 
+	proxy Proxy
+	
 	interceptionID fetch.RequestID
 	networkRequestID network.RequestID
 	targetID target.ID
@@ -95,29 +97,27 @@ type QaImageResult struct {
 }
 
 func (j *JobHandler) InitBrowser() bool {
-	//proxy := Proxy{}
-	//proxyScheme := proxy.NetProxy()
+	proxyScheme := j.proxy.LocalIp
 
 	opts := append(
-		chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.DisableGPU,
-		chromedp.NoSandbox,
-		chromedp.Flag("headless", false),
-		chromedp.Flag("ignore-certificate-errors", true),
+		chromedtp.DefaultExecAllocatorOptions[:],
+		chromedtp.DisableGPU,
+		chromedtp.NoSandbox,
+		chromedtp.Flag("headless", false),
+		chromedtp.Flag("ignore-certificate-errors", true),
 	)
-	proxyScheme := "45.84.225.29:9000"
 
 	if proxyScheme != "" {
 		j.Task.SetLog("Подключаем прокси к браузеру (" + proxyScheme + ")")
-		opts = append(opts, chromedp.ProxyServer(proxyScheme))
+		opts = append(opts, chromedtp.ProxyServer(proxyScheme))
 	}
 
 	// Запускаем контекст браузера
-	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
+	allocCtx, cancel := chromedtp.NewExecAllocator(context.Background(), opts...)
 	j.CancelBrowser = cancel
 
 	// Устанавливаем собственный logger
-	taskCtx, cancel := chromedp.NewContext(allocCtx)
+	taskCtx, cancel := chromedtp.NewContext(allocCtx)
 	j.CancelLogger = cancel
 
 	// Ставим таймер на отключение если зависнет
@@ -126,13 +126,26 @@ func (j *JobHandler) InitBrowser() bool {
 
 	j.ctx = taskCtx
 
-	if err := chromedp.Run(taskCtx,
+	pattern := fetch.RequestPattern{}
+	pattern.URLPattern = "*"
+
+	var reqPatterns []*fetch.RequestPattern
+	reqPatterns = append(reqPatterns, &pattern)
+
+	fetchEnabled := fetch.Enable().WithPatterns(reqPatterns).WithHandleAuthRequests(true)
+
+	if err := chromedtp.Run(taskCtx,
 		network.Enable(),
 		performance.Enable(),
 		page.SetLifecycleEventsEnabled(true),
 		security.SetIgnoreCertificateErrors(true),
 		emulation.SetTouchEmulationEnabled(false),
 		network.SetCacheDisabled(true),
+		fetchEnabled,
+		chromedtp.ActionFunc(func (ctx context.Context) error {
+			j.ListenForNetworkEvent(ctx)
+			return nil
+		}),
 	); err != nil {
 		log.Println(err)
 		return false
@@ -157,12 +170,53 @@ func (j *JobHandler) OpenPaa() () {
 
 }
 
+func (j *JobHandler) ListenForNetworkEvent(ctx context.Context) {
+	chromedtp.ListenTarget(ctx, func(ev interface{}) {
+		switch ev := ev.(type) {
+
+		case *fetch.EventAuthRequired:
+			c := chromedtp.FromContext(ctx)
+			buf, _ := json.Marshal(map[string]interface{}{
+				"requestId": ev.RequestID.String(),
+				"authChallengeResponse": map[string]string{
+					"response": "ProvideCredentials",
+					"username": j.proxy.Login,
+					"password": j.proxy.Password,
+				},
+			})
+			cmd := &cdproto.Message{
+				ID:        20,
+				SessionID: c.Target.SessionID,
+				Method:    cdproto.MethodType("Fetch.continueWithAuth"),
+				Params:    buf,
+			}
+			err := c.Browser.Conn.Write(ctx, cmd)
+			fmt.Println("fetch.EventAuthRequired", err)
+
+		case *fetch.EventRequestPaused:
+			j.interceptionID = ev.RequestID
+			c := chromedtp.FromContext(ctx)
+			buf, _ := json.Marshal(map[string]string{"requestId":ev.RequestID.String()})
+			cmd := &cdproto.Message{
+				ID:        20,
+				SessionID: c.Target.SessionID,
+				Method:    cdproto.MethodType("Fetch.continueRequest"),
+				Params:    buf,
+			}
+			err := c.Browser.Conn.Write(ctx, cmd)
+			fmt.Println("fetch.EventRequestPaused", err)
+		}
+	})
+}
+
 func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	if !j.IsStart {
 		return false, "Задача закрыта"
 	}
 	var taskId int
-	var proxy MysqlProxy
+
+	j.proxy = Proxy{}
+
 	var fast QaSetting
 
 	// Инициализация контроллера для управление парсингом
@@ -199,52 +253,27 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	for i := 1; i < 2; i++ {
 		// Подключаемся к прокси
-		proxy = mysql.GetFreeProxy()
+		j.proxy.NewProxy()
 
-		if !proxy.Id.Valid {
+		if j.proxy.Id < 1 {
 			task.SetLog("Нет свободных прокси. Выход")
 			task.FreeTask()
 			return false, "Нет свободных прокси. Выход"
 		}
 
-		j.Proxy = proxy
-		proxy.SetTimeout(parser)
+		j.proxy.SetTimeout(parser)
 
 		j.InitBrowser()
 
 		// Запускаемся
 		task.SetLog("Открываем страницу (попытка №" + strconv.Itoa(i) + "): https://www.google.com/search?hl=en&q=" + url.QueryEscape(task.Keyword))
 
-		//duration := int64(rand.Intn(15))
-		//time.Sleep(time.Second * time.Duration(duration))
-
-		if err := chromedp.Run(j.ctx,
+		if err := chromedtp.Run(j.ctx,
 			// Устанавливаем страницу для парсинга
-			chromedp.Navigate("https://myip.ru/"),
-			chromedp.ActionFunc(func (ctx context.Context) error {
-
-				//fmt.Println(j.RequestID)
-				//err = fetch.ContinueRequest().Do(ctx)
-				//fmt.Println(err)
-
-				//err := cdp.Execute(ctx, "Network.AuthChallengeResponse", &fetch.AuthChallengeResponse{
-				//	Response: "Default",
-				//	Username: "adadfddaf",
-				//	Password: "4214214124",
-				//}, nil)
-				//err = fetch.ContinueWithAuth(fetch.RequestID(j.RequestID), &fetch.AuthChallengeResponse{
-				//	Response: "Default",
-				//	Username: "adadfddaf",
-				//	Password: "4214214124",
-				//}).Do(ctx)
-				//fmt.Println(err)
-				return nil
-			}),
-			chromedp.Sleep(time.Minute * 10),
-			//chromedp.Navigate("https://www.google.com/search?hl=en&q=" + task.Keyword),
-			//chromedp.WaitVisible("body", chromedp.ByQuery),
-			//// Вытащить html на проверку каптчи
-			//chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
+			chromedtp.Navigate("https://www.google.com/search?hl=en&q=" + task.Keyword),
+			chromedtp.WaitVisible("body", chromedtp.ByQuery),
+			// Вытащить html на проверку каптчи
+			chromedtp.OuterHTML("body", &searchHtml, chromedtp.ByQuery),
 		); err != nil {
 			//j.CancelJob()
 			task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась.")
@@ -258,15 +287,15 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	if j.CheckCaptcha(searchHtml) {
 		task.SetError("Отсутствует PAA. Есть каптча...")
-		proxy.FreeProxy()
-		utils.ErrorHandler(chromedp.Cancel(j.ctx))
+		j.proxy.FreeProxy()
+		utils.ErrorHandler(chromedtp.Cancel(j.ctx))
 		return false, "Отсутствует PAA. Есть каптча..."
 	}
 
 	if searchHtml == "" || !j.CheckPaa(searchHtml) {
 		task.SetError("Отсутствует PAA.")
-		proxy.FreeProxy()
-		utils.ErrorHandler(chromedp.Cancel(j.ctx))
+		j.proxy.FreeProxy()
+		utils.ErrorHandler(chromedtp.Cancel(j.ctx))
 		return false, "Отсутствует PAA."
 	}
 
@@ -277,11 +306,11 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	j.SetFastAnswer(searchHtml)
 
 	searchHtml = ""
-	if err := chromedp.Run(j.ctx,
+	if err := chromedtp.Run(j.ctx,
 		// Кликаем сразу на первый вопрос
-		chromedp.Click(".related-question-pair:first-child .cbphWd"),
+		chromedtp.Click(".related-question-pair:first-child .cbphWd"),
 		// Ждём 0.3 секунды чтобы открылся вопрос
-		chromedp.Sleep(time.Millisecond * 300),
+		chromedtp.Sleep(time.Millisecond * 300),
 	); err != nil {
 		log.Println(err)
 	}
@@ -302,8 +331,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 			// Завершение работы скрипта
 			task.SetError(msg)
-			proxy.FreeProxy()
-			utils.ErrorHandler(chromedp.Cancel(j.ctx))
+			j.proxy.FreeProxy()
+			utils.ErrorHandler(chromedtp.Cancel(j.ctx))
 			return false, msg
 
 		} else if stats.S <= task.QaCountFrom {}
@@ -377,8 +406,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		if !wp.CheckConn() {
 			task.SetError("Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")")
 			task.SetError(wp.err.Error())
-			proxy.FreeProxy()
-			utils.ErrorHandler(chromedp.Cancel(j.ctx))
+			j.proxy.FreeProxy()
+			utils.ErrorHandler(chromedtp.Cancel(j.ctx))
 			return false, "Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")"
 		}
 
@@ -468,13 +497,13 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		// Парсим видео
 		var videosHtml string
-		if err := chromedp.Run(j.ctx,
+		if err := chromedtp.Run(j.ctx,
 			// Устанавливаем страницу для парсинга
-			chromedp.Navigate("https://www.youtube.com/results?search_query=" + task.Keyword),
+			chromedtp.Navigate("https://www.youtube.com/results?search_query=" + task.Keyword),
 			// Ждём блоков с видео
-			chromedp.WaitVisible(`a.ytd-thumbnail`, chromedp.ByQueryAll),
+			chromedtp.WaitVisible(`a.ytd-thumbnail`, chromedtp.ByQueryAll),
 			// Вытащить html со списком
-			chromedp.OuterHTML("#contents.ytd-section-list-renderer", &videosHtml, chromedp.ByQuery),
+			chromedtp.OuterHTML("#contents.ytd-section-list-renderer", &videosHtml, chromedtp.ByQuery),
 		); err != nil {
 			log.Println(err)
 		}
@@ -664,8 +693,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		task.SetLog("Текст статьи сохранён в БД")
 		if (task.QaCountFrom > 0 && len(qaQs) < task.QaCountFrom) || (task.From > 0 && utf8.RuneCountInString(qaTotalPage.Content) < task.From) {
 			task.SetError("Снята с публикации — слишком короткая статья получилась")
-			proxy.FreeProxy()
-			utils.ErrorHandler(chromedp.Cancel(j.ctx))
+			j.proxy.FreeProxy()
+			utils.ErrorHandler(chromedtp.Cancel(j.ctx))
 			return false, "Снята с публикации — слишком короткая статья получилась"
 		}
 
@@ -674,8 +703,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		if qaTotalPage.CatId < 1 {
 			task.SetError("Проблема с размещением в рубрику")
 			task.SetError(wp.err.Error())
-			proxy.FreeProxy()
-			utils.ErrorHandler(chromedp.Cancel(j.ctx))
+			j.proxy.FreeProxy()
+			utils.ErrorHandler(chromedtp.Cancel(j.ctx))
 			return false, "Проблема с размещением в рубрику"
 		}
 
@@ -700,9 +729,9 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		if fault {
 			task.SetLog("Не получилось разместить статью на сайте")
-			proxy.FreeProxy()
+			j.proxy.FreeProxy()
 			task.SetError(wp.err.Error())
-			utils.ErrorHandler(chromedp.Cancel(j.ctx))
+			utils.ErrorHandler(chromedtp.Cancel(j.ctx))
 			return false, "Не получилось разместить статью на сайте"
 		}
 
@@ -711,7 +740,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		task.SetLog(`Данные сохранены в "Search for"`)
 	}
 	task.SetFinished(1, "")
-	proxy.FreeProxy()
+	j.proxy.FreeProxy()
 	fmt.Println(taskId)
 
 	return true, "Задача #" + strconv.Itoa(taskId) + " была успешно выполнена"
@@ -722,8 +751,8 @@ func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 	settings := map[string]QaSetting{}
 
 	// Вытягиваем html код PAA для парсинга вопросов
-	if err := chromedp.Run(j.ctx,
-		chromedp.OuterHTML(`.kno-kp .ifM9O`, &paaHtml, chromedp.ByQuery),
+	if err := chromedtp.Run(j.ctx,
+		chromedtp.OuterHTML(`.kno-kp .ifM9O`, &paaHtml, chromedtp.ByQuery),
 	); err != nil {
 		log.Println(err)
 	}
@@ -735,7 +764,7 @@ func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 		log.Println(err)
 	}
 
-	var tasks chromedp.Tasks
+	var tasks chromedtp.Tasks
 	clicked := map[string]bool{}
 	// Начинаем перебор блоков с вопросами
 	doc.Find(".related-question-pair").Each(func(i int, s *goquery.Selection) {
@@ -770,8 +799,8 @@ func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 
 				// Собираем задачи для кликинга по вопросам
 				if _, ok := settings[ved]; !ok {
-					tasks = append(tasks, chromedp.Click(".cbphWd[data-ved=\""+ved+"\"]"))
-					tasks = append(tasks, chromedp.Sleep(time.Millisecond*500))
+					tasks = append(tasks, chromedtp.Click(".cbphWd[data-ved=\""+ved+"\"]"))
+					tasks = append(tasks, chromedtp.Sleep(time.Millisecond*500))
 					clicked[ved] = true
 				}
 
@@ -787,7 +816,7 @@ func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 
 	// Проверяем есть ли уже достаточное количество вопросов или всё таки нужно продолжить кликинг по блокам
 	if stats.All < stats.Wqc && len(tasks) > 0 {
-		if err := chromedp.Run(j.ctx, tasks); err != nil {
+		if err := chromedtp.Run(j.ctx, tasks); err != nil {
 			log.Println(err)
 		}
 		for k, v := range clicked {

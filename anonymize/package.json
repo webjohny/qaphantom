@@ -1,0 +1,15 @@
+{
+  "name": "anonymize",
+  "version": "1.0.0",
+  "description": "anonymize proxy",
+  "main": "index.js",
+  "bin": "bin.js", 
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "WebTool",
+  "license": "ISC",
+  "dependencies": {
+    "proxy-chain": "^0.4.5"
+  }
+}

@@ -5,12 +5,13 @@ import "time"
 var (
 	utils Utils
 	mysql MysqlDb
+	conf Configuration
 )
 
 func main() {
 	utils = Utils{}
 
-	conf := Configuration{}
+	conf = Configuration{}
 	conf.Create()
 
 	// Connect to MysqlDB

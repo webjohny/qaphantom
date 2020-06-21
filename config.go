@@ -8,6 +8,8 @@ import (
 
 type Configuration struct {
 	Port      string
+	ProxyApi  string
+	ProxyKey  string
 	ApiHost   string
 	ApiLink   string
 	ApiKey    string

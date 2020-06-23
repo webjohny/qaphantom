@@ -29,8 +29,6 @@ import (
 )
 
 type JobHandler struct {
-	Task MysqlFreeTask
-
 	NumberInits int
 	SearchHtml string
 	IsStart bool
@@ -40,6 +38,7 @@ type JobHandler struct {
 	CancelTimeout context.CancelFunc
 	CancelLogger context.CancelFunc
 
+	task MysqlFreeTask
 	proxy Proxy
 
 	interceptionID fetch.RequestID
@@ -103,14 +102,17 @@ func (j *JobHandler) InitBrowser() bool {
 		chromedtp.DefaultExecAllocatorOptions[:],
 		chromedtp.DisableGPU,
 		chromedtp.NoSandbox,
-		//chromedtp.Flag("headless", false),
-		chromedtp.Flag("ignore-certificate-errors", true),
+		chromedtp.Flag("headless", false),
 	)
 
 	if proxyScheme != "" {
-		j.Task.SetLog("Подключаем прокси к браузеру (" + proxyScheme + ")")
+		j.task.SetLog("Подключаем прокси к браузеру (" + proxyScheme + ")")
 		opts = append(opts, chromedtp.ProxyServer(proxyScheme))
 	}
+
+	agent := mysql.GetAgent()
+	j.task.SetLog("Подключаем user agent'a (" + agent.Sign.String + ")")
+	opts = append(opts, chromedtp.UserAgent(agent.Sign.String))
 
 	// Запускаем контекст браузера
 	allocCtx, cancel := chromedtp.NewExecAllocator(context.Background(), opts...)
@@ -127,14 +129,6 @@ func (j *JobHandler) InitBrowser() bool {
 
 	j.ctx = taskCtx
 
-	pattern := fetch.RequestPattern{}
-	pattern.URLPattern = "*"
-
-	var reqPatterns []*fetch.RequestPattern
-	reqPatterns = append(reqPatterns, &pattern)
-
-	fetchEnabled := fetch.Enable().WithPatterns(reqPatterns).WithHandleAuthRequests(true)
-
 	if err := chromedtp.Run(taskCtx,
 		network.Enable(),
 		performance.Enable(),
@@ -144,9 +138,10 @@ func (j *JobHandler) InitBrowser() bool {
 		network.SetCacheDisabled(true),
 		chromedtp.ActionFunc(func (ctx context.Context) error {
 			if j.proxy.Login != "" && j.proxy.Password != "" {
-				err := fetchEnabled.Do(ctx)
+				err := fetch.Enable().WithPatterns([]*fetch.RequestPattern{{"*", "", ""}}).WithHandleAuthRequests(true).Do(ctx)
 				if err != nil {
 					fmt.Println("Fetch.enable", err)
+					return err
 				}
 				j.ListenForNetworkEvent(ctx)
 			}
@@ -154,13 +149,15 @@ func (j *JobHandler) InitBrowser() bool {
 		}),
 	); err != nil {
 		log.Println(err)
+		j.task.SetLog("Браузер не загрузился. (" + err.Error() + ")")
+		j.Cancel()
 		return false
 	}
 
 	return true
 }
 
-func (j *JobHandler) CancelJob() () {
+func (j *JobHandler) Cancel() () {
 	if j.CancelBrowser != nil {
 		j.CancelBrowser()
 	}
@@ -170,10 +167,9 @@ func (j *JobHandler) CancelJob() () {
 	if j.CancelTimeout != nil {
 		j.CancelTimeout()
 	}
-}
-
-func (j *JobHandler) OpenPaa() () {
-
+	if j.proxy.LocalIp != "" {
+		j.proxy.FreeProxy()
+	}
 }
 
 func (j *JobHandler) ListenForNetworkEvent(ctx context.Context) {
@@ -202,9 +198,6 @@ func (j *JobHandler) ListenForNetworkEvent(ctx context.Context) {
 				fmt.Println("Fetch.continueWithAuth", err)
 			}
 
-		case *network.EventRequestWillBeSent:
-			j.networkRequestID = ev.RequestID
-
 		case *fetch.EventRequestPaused:
 			j.interceptionID = ev.RequestID
 			buf, _ := json.Marshal(map[string]string{"requestId":ev.RequestID.String()})
@@ -223,6 +216,15 @@ func (j *JobHandler) ListenForNetworkEvent(ctx context.Context) {
 }
 
 func (j *JobHandler) Run(parser int) (status bool, msg string) {
+	//img, _ := os.Create("image.jpg")
+	//defer img.Close()
+	//
+	//resp, _ := http.Get("https://www.overclockers.ua/news/other/126835-btc-halving-2.jpg")
+	//defer resp.Body.Close()
+	//
+	//b, _ := io.Copy(img, resp.Body)
+	//log.Fatal("File size: ", b)
+
 	if !j.IsStart {
 		return false, "Задача закрыта"
 	}
@@ -231,6 +233,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	j.proxy = Proxy{}
 
 	var fast QaSetting
+	var config MysqlConfig
 
 	// Инициализация контроллера для управление парсингом
 	if parser < 1 {
@@ -243,7 +246,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		return false, "Свободных задач нет в наличии"
 	}
 	taskId = task.Id
-	j.Task = task
+	j.task = task
 
 	if task.TryCount == 5 {
 		task.SetLog("5-я неудавшаяся попытка парсинга. Исключаем ключевик")
@@ -264,7 +267,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	var searchHtml string
 
-	for i := 1; i < 2; i++ {
+	for i := 1; i < 6; i++ {
 		// Подключаемся к прокси
 		j.proxy.NewProxy()
 
@@ -283,20 +286,20 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		if err := chromedtp.Run(j.ctx,
 			// Устанавливаем страницу для парсинга
-			//chromedtp.Navigate("https://myip.ru"),
 			chromedtp.Navigate("https://www.google.com/search?hl=en&q=" + task.Keyword),
+			chromedtp.Sleep(time.Minute),
 			chromedtp.WaitVisible("body", chromedtp.ByQuery),
 			// Вытащить html на проверку каптчи
 			chromedtp.OuterHTML("body", &searchHtml, chromedtp.ByQuery),
 		); err != nil {
-			task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась.")
 			log.Println(err)
+			task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
+			j.Cancel()
 		}else{
 			break
 		}
 	}
-
-	defer j.CancelJob()
+	defer j.Cancel()
 
 	if j.CheckCaptcha(searchHtml) {
 		task.SetError("Отсутствует PAA. Есть каптча...")
@@ -307,13 +310,14 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	if searchHtml == "" || !j.CheckPaa(searchHtml) {
 		task.SetError("Отсутствует PAA.")
-		j.proxy.FreeProxy()
-		utils.ErrorHandler(chromedtp.Cancel(j.ctx))
+		j.Cancel()
 		return false, "Отсутствует PAA."
 	}
 
 	task.SetLog("Блоки загружены")
 	task.SetLog("Начинаем обработку PAA")
+
+	config = mysql.GetConfig()
 
 	// Загружаем HTML документ в GoQuery пакет который организует облегчённую работу с HTML селекторами
 	j.SetFastAnswer(searchHtml)
@@ -326,6 +330,9 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		chromedtp.Sleep(time.Millisecond * 300),
 	); err != nil {
 		log.Println(err)
+		task.SetLog("Отсутствует PAA. (" + err.Error() + ")")
+		j.Cancel()
+		return false, "Отсутствует PAA."
 	}
 
 	// Запускаем функцию перебора вопросов
@@ -344,8 +351,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 			// Завершение работы скрипта
 			task.SetError(msg)
-			j.proxy.FreeProxy()
-			utils.ErrorHandler(chromedtp.Cancel(j.ctx))
+			j.Cancel()
 			return false, msg
 
 		} else if stats.S <= task.QaCountFrom {}
@@ -370,6 +376,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			"link_title" : setting.LinkTitle,
 		}); err != nil {
 			log.Println(err)
+			task.SetLog("Не сохранился результат. (" + err.Error() + ")")
 		}
 
 		if task.SavingAvailable {
@@ -382,6 +389,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				"error" : "",
 			}); err != nil {
 				log.Println(err)
+				task.SetLog("Не добавилась новая задача. (" + err.Error() + ")")
 			}
 		}
 
@@ -419,8 +427,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		if !wp.CheckConn() {
 			task.SetError("Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")")
 			task.SetError(wp.err.Error())
-			j.proxy.FreeProxy()
-			utils.ErrorHandler(chromedtp.Cancel(j.ctx))
+			j.Cancel()
 			return false, "Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")"
 		}
 
@@ -519,6 +526,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			chromedtp.OuterHTML("#contents.ytd-section-list-renderer", &videosHtml, chromedtp.ByQuery),
 		); err != nil {
 			log.Println(err)
+			task.SetLog("Спарсилось видео. (" + err.Error() + ")")
 		}
 
 		var videos []string
@@ -529,6 +537,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			doc, err := goquery.NewDocumentFromReader(videoReader)
 			if err != nil {
 				log.Println(err)
+				task.SetLog("Неразборчивый код из youtube. (" + err.Error() + ")")
 			}
 
 			// Начинаем перебор блоков с видео
@@ -547,8 +556,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		}
 
 		// Заголовок
-		//toDo $variants = $this->fconfig->get_variants();
-		variants := []string{"Question: ", "Quick answer: ", ""}
+		variants := config.GetVariants()
 
 		var h1 string
 		if task.H1 < 1 || len(qaQs) < 1 {
@@ -706,8 +714,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		task.SetLog("Текст статьи сохранён в БД")
 		if (task.QaCountFrom > 0 && len(qaQs) < task.QaCountFrom) || (task.From > 0 && utf8.RuneCountInString(qaTotalPage.Content) < task.From) {
 			task.SetError("Снята с публикации — слишком короткая статья получилась")
-			j.proxy.FreeProxy()
-			utils.ErrorHandler(chromedtp.Cancel(j.ctx))
+			j.Cancel()
 			return false, "Снята с публикации — слишком короткая статья получилась"
 		}
 
@@ -716,8 +723,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		if qaTotalPage.CatId < 1 {
 			task.SetError("Проблема с размещением в рубрику")
 			task.SetError(wp.err.Error())
-			j.proxy.FreeProxy()
-			utils.ErrorHandler(chromedtp.Cancel(j.ctx))
+			j.Cancel()
 			return false, "Проблема с размещением в рубрику"
 		}
 
@@ -742,9 +748,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		if fault {
 			task.SetLog("Не получилось разместить статью на сайте")
-			j.proxy.FreeProxy()
 			task.SetError(wp.err.Error())
-			utils.ErrorHandler(chromedtp.Cancel(j.ctx))
+			j.Cancel()
 			return false, "Не получилось разместить статью на сайте"
 		}
 
@@ -753,9 +758,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		task.SetLog(`Данные сохранены в "Search for"`)
 	}
 	task.SetFinished(1, "")
-	j.proxy.FreeProxy()
 	fmt.Println(taskId)
-	utils.ErrorHandler(chromedtp.Cancel(j.ctx))
+	j.Cancel()
 
 	return true, "Задача #" + strconv.Itoa(taskId) + " была успешно выполнена"
 }
@@ -793,7 +797,7 @@ func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 		text := strings.Replace(s.Find(".mod").Text(), date, "", -1)
 		txtTtml, _ := s.Find(".mod").Html()
 
-		if j.Task.ParseDoubles > 0 || !mysql.GetResultByQAndA(question, text).Id.Valid {
+		if j.task.ParseDoubles > 0 || !mysql.GetResultByQAndA(question, text).Id.Valid {
 			// Берём уникальный идентификатор для вопроса
 			stats.All++
 			ved, _ := s.Find(".cbphWd").Attr("data-ved")

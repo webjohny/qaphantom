@@ -39,29 +39,7 @@ func (p Proxy) SetTimeout(parser int) sql.Result {
 	data["parser"] = strconv.Itoa(parser)
 	data["timeout"] = formattedDate
 
-	sqlQuery := "UPDATE `proxy` SET "
-
-	if len(data) > 0 {
-		updateQuery := ""
-		i := 0
-		for k, v := range data {
-			if i > 0 {
-				updateQuery += ", "
-			}
-			updateQuery += "`" + k + "` = "
-			if v == "NULL" {
-				updateQuery += "NULL"
-			}else{
-				updateQuery += ":" + k
-			}
-			i++
-		}
-		sqlQuery += updateQuery
-	}
-
-	sqlQuery += " WHERE `id` = " + strconv.Itoa(p.Id)
-
-	res, err := mysql.db.NamedExec(sqlQuery, data)
+	res, err := mysql.UpdateProxy(data, p.Id)
 	if err != nil {
 		log.Println(err)
 	}

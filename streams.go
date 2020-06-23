@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"os/exec"
 	"time"
 )
@@ -51,11 +52,13 @@ func (s *Stream) Start(streamId int, limit int64) {
 			break
 		}
 
+		randSecs := time.Second * time.Duration(int64(rand.Intn(20)))
+
 		fmt.Println("Start stream #", streamId, s.cmd)
 		s.StartTaskTimer(streamId, limit)
-		fmt.Println("End stream #", streamId, time.Second*15)
+		fmt.Println("End stream #", streamId, randSecs)
 
-		time.Sleep(time.Second * 15)
+		time.Sleep(randSecs)
 	}
 }
 
@@ -65,7 +68,7 @@ func (s *Stream) Stop() {
 		s.cancelTimer()
 	}
 	if s.job.IsStart {
-		s.job.CancelJob()
+		s.job.Cancel()
 		s.job.IsStart = false
 	}
 }

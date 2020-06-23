@@ -37,10 +37,26 @@ type MysqlSite struct {
 	CountRows sql.NullInt64 `db:"count_rows" json:"count_rows"`
 }
 
+type MysqlConfig struct {
+	Id sql.NullInt64 `db:"id" json:"id"`
+	FlickrKey sql.NullString `db:"flickr_key" json:"flickr_key"`
+	FlickrSecret sql.NullString `db:"flickr_secret" json:"flickr_secret"`
+	Antigate sql.NullString `db:"antigate" json:"antigate"`
+	Language sql.NullString `db:"language" json:"language"`
+	Variants sql.NullString `db:"variants" json:"variants"`
+}
+
 type MysqlCat struct {
 	Id sql.NullInt64 `db:"id" json:"id"`
 	SiteId sql.NullInt64 `db:"site_id" json:"site_id"`
 	Title sql.NullString `db:"title" json:"title"`
+}
+
+type MysqlUagent struct {
+	Id sql.NullInt64 `db:"id" json:"id"`
+	Sign sql.NullString `db:"sign" json:"sign"`
+	Status sql.NullInt32 `db:"status" json:"status"`
+	Timeout sql.NullString `db:"timeout" json:"timeout"`
 }
 
 type MysqlResult struct {

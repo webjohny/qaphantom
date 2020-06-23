@@ -155,34 +155,6 @@ func (m *MysqlDb) UpdateTask(data map[string]interface{}, id int) (sql.Result, e
 	return res, err
 }
 
-func (m *MysqlDb) UpdateProxy(data map[string]interface{}, id int) (sql.Result, error) {
-	sqlQuery := "UPDATE `proxy` SET "
-
-	if len(data) > 0 {
-		updateQuery := ""
-		i := 0
-		for k, v := range data {
-			if i > 0 {
-				updateQuery += ", "
-			}
-			updateQuery += "`" + k + "` = "
-			if v == "NULL" {
-				updateQuery += "NULL"
-			}else{
-				updateQuery += ":" + k
-			}
-			i++
-		}
-		sqlQuery += updateQuery
-	}
-
-	sqlQuery += " WHERE `id` = " + strconv.Itoa(id)
-
-	res, err := m.db.NamedExec(sqlQuery, data)
-
-	return res, err
-}
-
 func (m *MysqlDb) AddTask(item map[string]interface{}) (sql.Result, error) {
 	sqlQuery := "INSERT INTO `tasks` SET "
 	sqlQuery += "`site_id` = :site_id, " +

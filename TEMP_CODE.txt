@@ -1,0 +1,5 @@
+proxies := mysql.GetProxies()
+for _, proxy := range proxies {
+    agent := mysql.GetAgent()
+    mysql.UpdateProxy(map[string]interface{}{"agent":agent.Sign.String}, int(proxy.Id.Int64))
+}

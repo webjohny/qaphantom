@@ -13,6 +13,7 @@ type Proxy struct {
 	Port string
 	Login string
 	Password string
+	Agent string
 
 	IsUsing bool
 
@@ -28,6 +29,7 @@ func (p *Proxy) NewProxy() {
 	p.Port = proxy.Port.String
 	p.Login = proxy.Login.String
 	p.Password = proxy.Password.String
+	p.Agent = proxy.Agent.String
 	p.LocalIp = p.Host + ":" + p.Port
 }
 

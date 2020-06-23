@@ -129,8 +129,6 @@ type MysqlFreeTask struct {
 	SymbMicroMarking string `db:"symb_micro_marking" json:"symb_micro_marking"`
 	CountRows int `db:"count_rows" json:"count_rows"`
 	SavingAvailable bool `json:"saving_available"`
-
-	Mysql *MysqlDb
 }
 
 type MysqlProxy struct {
@@ -140,10 +138,9 @@ type MysqlProxy struct {
 	Port sql.NullString `json:"port"`
 	Login sql.NullString `json:"login"`
 	Password sql.NullString `json:"password"`
+	Agent sql.NullString `json:"agent"`
 	Status sql.NullInt64 `json:"status"`
 	Parser sql.NullString `json:"parser"`
 	Timeout sql.NullString `json:"timeout"`
-
-	Mysql *MysqlDb
 }
 

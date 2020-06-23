@@ -29,9 +29,9 @@ func main() {
 		streams: Streams{},
 	}
 
-	job := JobHandler{}
-	job.IsStart = true
-	job.Run(0)
+	//job := JobHandler{}
+	//job.IsStart = true
+	//job.Run(0)
 
 	routes.Run()
 

@@ -26,8 +26,6 @@ func (m *MysqlDb) GetFreeTask(ids []string) MysqlFreeTask {
 	var freeTask MysqlFreeTask
 	var sites []MysqlSite
 
-	freeTask.Mysql = m
-
 	sqlCount := "SELECT COUNT(*) FROM `tasks` WHERE `site_id` = s.id"
 	sqlSelectSite := "s.id, s.qsts_limit, s.more_tags, s.symb_micro_marking, s.language, s.theme, s.from, s.to, s.qa_count_from, s.qa_count_to, s.login, s.password, s.domain, s.h1, s.sh_format, s.sh_order, s.video_step, s.linking, s.parse_dates, s.parse_doubles, s.parse_fast, s.parse_search4, s.image_source, s.image_key, s.pub_image, (" + sqlCount + ") as count_rows"
 	sqlSite := "SELECT " + sqlSelectSite + " FROM sites s"

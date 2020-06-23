@@ -38,6 +38,7 @@ type JobHandler struct {
 	CancelTimeout context.CancelFunc
 	CancelLogger context.CancelFunc
 
+	config MysqlConfig
 	task MysqlFreeTask
 	proxy Proxy
 
@@ -110,9 +111,10 @@ func (j *JobHandler) InitBrowser() bool {
 		opts = append(opts, chromedtp.ProxyServer(proxyScheme))
 	}
 
-	agent := mysql.GetAgent()
-	j.task.SetLog("Подключаем user agent'a (" + agent.Sign.String + ")")
-	opts = append(opts, chromedtp.UserAgent(agent.Sign.String))
+	if j.proxy.Agent != "" {
+		j.task.SetLog("Подключаем user agent'a (" + j.proxy.Agent + ")")
+		opts = append(opts, chromedtp.UserAgent(j.proxy.Agent))
+	}
 
 	// Запускаем контекст браузера
 	allocCtx, cancel := chromedtp.NewExecAllocator(context.Background(), opts...)
@@ -233,7 +235,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	j.proxy = Proxy{}
 
 	var fast QaSetting
-	var config MysqlConfig
 
 	// Инициализация контроллера для управление парсингом
 	if parser < 1 {
@@ -317,7 +318,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	task.SetLog("Блоки загружены")
 	task.SetLog("Начинаем обработку PAA")
 
-	config = mysql.GetConfig()
+	j.config = mysql.GetConfig()
 
 	// Загружаем HTML документ в GoQuery пакет который организует облегчённую работу с HTML селекторами
 	j.SetFastAnswer(searchHtml)
@@ -518,6 +519,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		// Парсим видео
 		var videosHtml string
 		if err := chromedtp.Run(j.ctx,
+			chromedtp.Sleep(time.Second * time.Duration(int64(rand.Intn(10)))),
 			// Устанавливаем страницу для парсинга
 			chromedtp.Navigate("https://www.youtube.com/results?search_query=" + task.Keyword),
 			// Ждём блоков с видео
@@ -556,7 +558,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		}
 
 		// Заголовок
-		variants := config.GetVariants()
+		variants := j.config.GetVariants()
 
 		var h1 string
 		if task.H1 < 1 || len(qaQs) < 1 {
@@ -762,6 +764,21 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	j.Cancel()
 
 	return true, "Задача #" + strconv.Itoa(taskId) + " была успешно выполнена"
+}
+
+func (j *JobHandler) AntiCaptcha(urlKey string) {
+	c := &Captcha{APIKey: j.config.Antigate.String}
+
+	key, err := c.SendRecaptcha(
+		"http://http.myjino.ru/recaptcha/test-get.php", // url that has the recaptcha
+		"6Lc_aCMTAAAAABx7u2W0WPXnVbI_v6ZdbM6rYf16", // the recaptcha key
+		time.Minute,
+	)
+	if err != nil {
+		fmt.Println(err)
+	}else{
+		fmt.Println(key)
+	}
 }
 
 func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {

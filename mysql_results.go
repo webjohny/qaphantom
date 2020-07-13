@@ -2,17 +2,16 @@ package main
 
 import (
 	"database/sql"
-	"log"
 	"time"
 )
 
 func (m *MysqlDb) GetResultByQAndA(q string, a string) MysqlResult {
 	var result MysqlResult
-	sqlQuery := "SELECT * FROM `results` WHERE `q` = '" + q + "' AND `a` = '" + a + "' LIMIT 1"
+	sqlQuery := "SELECT * FROM `results` WHERE `q` = ? AND `a` = ? LIMIT 1"
 
-	err := m.db.Get(&result, sqlQuery)
+	err := m.db.Get(&result, sqlQuery, q, a)
 	if err != nil {
-		log.Println(err)
+		//log.Println("MysqlDb.GetResultByQAndA", err)
 	}
 
 	return result

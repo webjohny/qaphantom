@@ -12,26 +12,47 @@ import (
 type Stream struct {
 	state bool
 	job JobHandler
+	Proxy Proxy
+	Browser Browser
 	cmd string
 	ctxTimer context.Context
-	cancelTimer context.CancelFunc
+	CancelTimer context.CancelFunc
 }
 
 func (s *Stream) StartTaskTimer(streamId int, limit int64) bool {
-	var status bool = true
+	var status = true
 	cmd := s.cmd
 
-	s.ctxTimer, s.cancelTimer = context.WithTimeout(context.Background(), time.Duration(1000 * limit) * time.Millisecond)
-	defer s.cancelTimer()
+	if limit < 1 {
+		limit = 360
+	}
+
+	s.ctxTimer, s.CancelTimer = context.WithTimeout(context.Background(), time.Second * time.Duration(limit))
+	defer s.CancelTimer()
 
 	var err error
+
 	if cmd != "" {
 		//php -f /var/www/html/cron.php parser cron sleeping 5
 		_, err = exec.CommandContext(s.ctxTimer, "bash", "-c", cmd).Output()
-	} else {
+	} else if s.Browser.isOpened {
 		fmt.Println("Start job")
+		s.Browser.limit = limit
+		s.job.Browser = s.Browser
+		s.job.isFinished = make(chan bool)
 		s.job.IsStart = true
-		s.job.Run(streamId)
+		go s.job.Run(streamId)
+
+		select {
+			case <-s.ctxTimer.Done():
+				fmt.Println("Timeout job")
+				s.CancelTimer()
+				s.job.Cancel()
+
+			case <-s.job.isFinished:
+				fmt.Println("End job")
+				s.CancelTimer()
+		}
 	}
 
 	if err != nil {
@@ -47,29 +68,37 @@ func (s *Stream) Start(streamId int, limit int64) {
 
 	time.Sleep(time.Millisecond * time.Duration(streamId * 500))
 
+	if s.cmd == "" {
+		s.Browser.Init()
+	}
+
 	for {
-		if ! s.state {
+		if !s.state {
+			s.Browser.Cancel()
 			break
 		}
 
-		randSecs := time.Second * time.Duration(int64(rand.Intn(20)))
+		secs := time.Second * time.Duration(int64(rand.Intn(50)))
 
 		fmt.Println("Start stream #", streamId, s.cmd)
 		s.StartTaskTimer(streamId, limit)
-		fmt.Println("End stream #", streamId, randSecs)
+		fmt.Println("End stream #", streamId, secs)
 
-		time.Sleep(randSecs)
+		time.Sleep(secs)
 	}
 }
 
 func (s *Stream) Stop() {
 	s.state = false
-	if s.cancelTimer != nil {
-		s.cancelTimer()
+	if s.CancelTimer != nil {
+		s.CancelTimer()
+	}
+	if s.Browser.isOpened {
+		s.Browser.Cancel()
 	}
 	if s.job.IsStart {
-		s.job.Cancel()
 		s.job.IsStart = false
+		go s.job.Cancel()
 	}
 }
 

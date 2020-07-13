@@ -19,7 +19,7 @@ func (rt *Routes) GetFreeTask(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println(ids)
 
-	question := mysql.GetFreeTask(ids)
+	question := mysql.GetFreeTask(0)
 
 	err := json.NewEncoder(w).Encode(question)
 	if err != nil {

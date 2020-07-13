@@ -48,7 +48,7 @@ func (rt *Routes) StartStreams(count int, limit int, cmd string) {
 		}else{
 			stream.job = JobHandler{}
 		}
-		go stream.Start(i, int64(limit*1000))
+		go stream.Start(i, int64(limit))
 	}
 }
 

@@ -4,19 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/chromedp/cdproto"
-	"github.com/chromedp/cdproto/cdp"
-	"github.com/chromedp/cdproto/emulation"
-	"github.com/chromedp/cdproto/fetch"
-	"github.com/chromedp/cdproto/network"
-	"github.com/chromedp/cdproto/page"
-	"github.com/chromedp/cdproto/performance"
-	"github.com/chromedp/cdproto/security"
-	"github.com/chromedp/cdproto/target"
 	"log"
 	"math"
 	"math/rand"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -32,23 +24,17 @@ type JobHandler struct {
 	NumberInits int
 	SearchHtml string
 	IsStart bool
-	BrowserContextID cdp.BrowserContextID
 
-	CancelBrowser context.CancelFunc
-	CancelTimeout context.CancelFunc
-	CancelLogger context.CancelFunc
-
+	taskId int
 	config MysqlConfig
 	task MysqlFreeTask
 	proxy Proxy
 
-	interceptionID fetch.RequestID
-	networkRequestID network.RequestID
-	targetID target.ID
-	sessionID target.SessionID
-
+	Browser Browser
 	ctx context.Context
-	taskCtx context.Context
+	isFinished chan bool
+
+	CancelTimeout context.CancelFunc
 }
 
 type QaSetting struct {
@@ -96,164 +82,106 @@ type QaImageResult struct {
 	ShortLink string
 }
 
-func (j *JobHandler) InitBrowser() bool {
-	proxyScheme := j.proxy.LocalIp
 
-	opts := append(
-		chromedtp.DefaultExecAllocatorOptions[:],
-		chromedtp.DisableGPU,
-		chromedtp.NoSandbox,
-		chromedtp.Flag("headless", false),
-	)
-
-	if proxyScheme != "" {
-		j.task.SetLog("Подключаем прокси к браузеру (" + proxyScheme + ")")
-		opts = append(opts, chromedtp.ProxyServer(proxyScheme))
-	}
-
-	if j.proxy.Agent != "" {
-		j.task.SetLog("Подключаем user agent'a (" + j.proxy.Agent + ")")
-		opts = append(opts, chromedtp.UserAgent(j.proxy.Agent))
-	}
-
-	// Запускаем контекст браузера
-	allocCtx, cancel := chromedtp.NewExecAllocator(context.Background(), opts...)
-	j.CancelBrowser = cancel
-
-	// Устанавливаем собственный logger
-	//, chromedtp.WithDebugf(log.Printf)
-	taskCtx, cancel := chromedtp.NewContext(allocCtx)
-	j.CancelLogger = cancel
-
-	// Ставим таймер на отключение если зависнет
-	taskCtx, cancel = context.WithTimeout(taskCtx, 30*time.Second)
-	j.CancelTimeout = cancel
-
-	j.ctx = taskCtx
-
-	if err := chromedtp.Run(taskCtx,
-		network.Enable(),
-		performance.Enable(),
-		page.SetLifecycleEventsEnabled(true),
-		security.SetIgnoreCertificateErrors(true),
-		emulation.SetTouchEmulationEnabled(false),
-		network.SetCacheDisabled(true),
-		chromedtp.ActionFunc(func (ctx context.Context) error {
-			if j.proxy.Login != "" && j.proxy.Password != "" {
-				err := fetch.Enable().WithPatterns([]*fetch.RequestPattern{{"*", "", ""}}).WithHandleAuthRequests(true).Do(ctx)
-				if err != nil {
-					fmt.Println("Fetch.enable", err)
-					return err
-				}
-				j.ListenForNetworkEvent(ctx)
-			}
-			return nil
-		}),
-	); err != nil {
+func (j *JobHandler) AntiCaptcha(url string, html string) (string, error) {
+	paaReader := strings.NewReader(html)
+	doc, err := goquery.NewDocumentFromReader(paaReader)
+	if err != nil {
 		log.Println(err)
-		j.task.SetLog("Браузер не загрузился. (" + err.Error() + ")")
-		j.Cancel()
-		return false
+		return "", err
 	}
 
-	return true
+	siteKey, _ := doc.Find("#recaptcha").Attr("data-sitekey")
+	sToken, _ := doc.Find("#recaptcha").Attr("data-s")
+
+	c := &Captcha{
+		j.config.Antigate.String,
+		url,
+		siteKey,
+		sToken,
+		"http",
+		j.Browser.Proxy.Host,
+		j.Browser.Proxy.Port,
+		j.Browser.Proxy.Login,
+		j.Browser.Proxy.Password,
+		j.Browser.Proxy.Agent,
+		time.Minute * 2,
+	}
+
+	key, err := c.SendRecaptcha()
+	if err != nil {
+		log.Println(err)
+	}
+	return key, err
 }
 
-func (j *JobHandler) Cancel() () {
-	if j.CancelBrowser != nil {
-		j.CancelBrowser()
-	}
-	if j.CancelLogger != nil {
-		j.CancelLogger()
-	}
-	if j.CancelTimeout != nil {
-		j.CancelTimeout()
-	}
-	if j.proxy.LocalIp != "" {
-		j.proxy.FreeProxy()
+func (j *JobHandler) SetTimeout(secs int) {
+	ctx, cancel := context.WithTimeout(j.Browser.ctx, time.Duration(secs) * time.Second)
+	j.CancelTimeout = cancel
+	j.ctx = ctx
+}
+
+func (j *JobHandler) Cancel() {
+	j.CancelTimeout()
+	if !LocalTest {
+		j.isFinished <- true
 	}
 }
 
-func (j *JobHandler) ListenForNetworkEvent(ctx context.Context) {
-	c := chromedtp.FromContext(ctx)
-	id := 5000
-	chromedtp.ListenTarget(ctx, func(ev interface{}) {
-		switch ev := ev.(type) {
-
-		case *fetch.EventAuthRequired:
-			buf, _ := json.Marshal(map[string]interface{}{
-				"requestId": ev.RequestID.String(),
-				"authChallengeResponse": map[string]string{
-					"response": "ProvideCredentials",
-					"username": j.proxy.Login,
-					"password": j.proxy.Password,
-				},
-			})
-			cmd := &cdproto.Message{
-				ID:        int64(id + 1),
-				SessionID: c.Target.SessionID,
-				Method:    cdproto.MethodType("Fetch.continueWithAuth"),
-				Params:    buf,
-			}
-			err := c.Browser.Conn.Write(ctx, cmd)
-			if err != nil {
-				fmt.Println("Fetch.continueWithAuth", err)
-			}
-
-		case *fetch.EventRequestPaused:
-			j.interceptionID = ev.RequestID
-			buf, _ := json.Marshal(map[string]string{"requestId":ev.RequestID.String()})
-			cmd := &cdproto.Message{
-				ID:        int64(id + 1),
-				SessionID: c.Target.SessionID,
-				Method:    cdproto.MethodType("Fetch.continueRequest"),
-				Params:    buf,
-			}
-			err := c.Browser.Conn.Write(ctx, cmd)
-			if err != nil {
-				fmt.Println("Fetch.continueRequest", err)
-			}
-		}
-	})
+func (j *JobHandler) Reload() {
+	j.CancelTimeout()
+	j.Browser.Reload()
+	j.SetTimeout(150)
 }
 
 func (j *JobHandler) Run(parser int) (status bool, msg string) {
-	//img, _ := os.Create("image.jpg")
-	//defer img.Close()
-	//
-	//resp, _ := http.Get("https://www.overclockers.ua/news/other/126835-btc-halving-2.jpg")
-	//defer resp.Body.Close()
-	//
-	//b, _ := io.Copy(img, resp.Body)
-	//log.Fatal("File size: ", b)
-
 	if !j.IsStart {
+		go j.Cancel()
 		return false, "Задача закрыта"
 	}
-	var taskId int
 
-	j.proxy = Proxy{}
+	fmt.Println("Start task")
+	j.SetTimeout(150)
+	//if j.ctx.Err().Error() != "" {
+	//	fmt.Println("Stop browser", j.ctx.Err().Error())
+	//	return false, "Browser failed"
+	//}
+
+
+	var taskId int
 
 	var fast QaSetting
 
-	// Инициализация контроллера для управление парсингом
-	if parser < 1 {
-		parser = 1000
+	// Берём свободную задачу в работу
+	var task MysqlFreeTask
+	if j.taskId < 1 {
+		task = mysql.GetFreeTask(0)
+	}else{
+		task = mysql.GetFreeTask(j.taskId)
 	}
 
-	// Берём свободную задачу в работу
-	task := mysql.GetFreeTask([]string{})
+	fmt.Println(task.Id)
 	if task.Id < 1 {
+		go j.Cancel()
 		return false, "Свободных задач нет в наличии"
 	}
 	taskId = task.Id
 	j.task = task
 
+	if j.CheckFinished() {
+		task.SetLog("Задача завершилась преждевременно из-за таймаута")
+		task.SaveLog()
+		return false, "Timeout"
+	}
+
 	if task.TryCount == 5 {
 		task.SetLog("5-я неудавшаяся попытка парсинга. Исключаем ключевик")
 		task.SetFinished(2, "Исключён после 5 попыток парсинга")
+		go j.Cancel()
 		return false, "Исключён после 5 попыток парсинга"
 	}
+
+	task.SetLog("Подключаем прокси #" + strconv.Itoa(j.Browser.Proxy.Id) + " к браузеру (" + j.Browser.Proxy.LocalIp + ")")
 
 	task.SetTimeout(parser)
 
@@ -267,58 +195,101 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	}
 
 	var searchHtml string
+	var googleUrl string
 
-	for i := 1; i < 6; i++ {
-		// Подключаемся к прокси
-		j.proxy.NewProxy()
+	j.config = mysql.GetConfig()
 
-		if j.proxy.Id < 1 {
-			task.SetLog("Нет свободных прокси. Выход")
-			task.FreeTask()
-			return false, "Нет свободных прокси. Выход"
+	for i := 1; i < 4; i++ {
+
+		if j.CheckFinished() {
+			task.SetLog("Задача завершилась преждевременно из-за таймаута")
+			task.SaveLog()
+			return false, "Timeout"
 		}
 
-		j.proxy.SetTimeout(parser)
-
-		j.InitBrowser()
-
 		// Запускаемся
-		task.SetLog("Открываем страницу (попытка №" + strconv.Itoa(i) + "): https://www.google.com/search?hl=en&q=" + url.QueryEscape(task.Keyword))
+		googleUrl = "https://www.google.com/search?hl=en&q=" + url.QueryEscape(task.Keyword)
+		task.SetLog("Открываем страницу (попытка №" + strconv.Itoa(i) + "): " + googleUrl)
 
 		if err := chromedtp.Run(j.ctx,
 			// Устанавливаем страницу для парсинга
-			chromedtp.Navigate("https://www.google.com/search?hl=en&q=" + task.Keyword),
-			chromedtp.Sleep(time.Minute),
+			chromedtp.Navigate(googleUrl),
+			chromedtp.Sleep(time.Second * time.Duration(rand.Intn(10))),
 			chromedtp.WaitVisible("body", chromedtp.ByQuery),
 			// Вытащить html на проверку каптчи
 			chromedtp.OuterHTML("body", &searchHtml, chromedtp.ByQuery),
 		); err != nil {
-			log.Println(err)
+			log.Println("JobHandler.Run", err)
 			task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
-			j.Cancel()
+			task.SaveLog()
+			j.Reload()
+			continue
 		}else{
+			if j.CheckCaptcha(searchHtml) {
+				task.SetLog("Есть каптча для " + j.Browser.Proxy.LocalIp + "...")
+				//j.proxy.SetTimeout(parser, 500)
+				//j.proxy.LocalIp = ""
+				//j.Cancel()
+				//continue
+				//key, _ := j.AntiCaptcha(googleUrl, searchHtml)
+				key := ""
+				if key != "" {
+					task.SetLog("Anticaptcha: " + key)
+					if err := chromedtp.Run(j.ctx,
+						chromedtp.WaitVisible("captcha-form", chromedtp.ByID),
+						chromedtp.WaitVisible("g-recaptcha-response", chromedtp.ByID),
+						chromedtp.ActionFunc(func(ctx context.Context) error {
+							fmt.Println("Yes")
+							return nil
+						}),
+						chromedtp.SetValue(`g-recaptcha-response`, key, chromedtp.ByID),
+						chromedtp.Submit(`captcha-form`, chromedtp.ByID),
+						chromedtp.Sleep(time.Second * 5),
+						chromedtp.WaitVisible("body", chromedtp.ByQuery),
+						chromedtp.OuterHTML("body", &searchHtml, chromedtp.ByQuery),
+					); err != nil {
+						log.Println("JobHandler.Run.2", err)
+						task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
+						task.SaveLog()
+						j.Reload()
+						continue
+					}
+					if searchHtml != "" {
+						f, err := os.Create("/var/www/example.txt")
+						if err != nil {
+							fmt.Println(err)
+						}
+						d2 := []byte(searchHtml)
+						n2, err := f.Write(d2)
+						if err != nil {
+							fmt.Println("JobHandler.Run.3", n2, err)
+							_ = f.Close()
+						}
+					}
+				}else{
+					task.SetError("Антикаптча не сработала для " + j.Browser.Proxy.LocalIp + "...")
+					j.Reload()
+					continue
+				}
+			}
+
+			if !j.CheckPaa(searchHtml) {
+				task.SetError("Отсутствует PAA.")
+				j.Cancel()
+				return false, "Отсутствует PAA."
+			}
 			break
 		}
 	}
-	defer j.Cancel()
 
-	if j.CheckCaptcha(searchHtml) {
-		task.SetError("Отсутствует PAA. Есть каптча...")
-		j.proxy.FreeProxy()
-		utils.ErrorHandler(chromedtp.Cancel(j.ctx))
-		return false, "Отсутствует PAA. Есть каптча..."
-	}
-
-	if searchHtml == "" || !j.CheckPaa(searchHtml) {
-		task.SetError("Отсутствует PAA.")
-		j.Cancel()
-		return false, "Отсутствует PAA."
+	if j.CheckFinished() {
+		task.SetLog("Задача завершилась преждевременно из-за таймаута")
+		task.SaveLog()
+		return false, "Timeout"
 	}
 
 	task.SetLog("Блоки загружены")
 	task.SetLog("Начинаем обработку PAA")
-
-	j.config = mysql.GetConfig()
 
 	// Загружаем HTML документ в GoQuery пакет который организует облегчённую работу с HTML селекторами
 	j.SetFastAnswer(searchHtml)
@@ -328,16 +299,31 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		// Кликаем сразу на первый вопрос
 		chromedtp.Click(".related-question-pair:first-child .cbphWd"),
 		// Ждём 0.3 секунды чтобы открылся вопрос
-		chromedtp.Sleep(time.Millisecond * 300),
+		chromedtp.Sleep(time.Second * time.Duration(rand.Intn(8))),
 	); err != nil {
-		log.Println(err)
-		task.SetLog("Отсутствует PAA. (" + err.Error() + ")")
+		log.Println("JobHandler.Run.4", err)
+		task.SetError("Отсутствует PAA. (" + err.Error() + ")")
 		j.Cancel()
 		return false, "Отсутствует PAA."
 	}
 
+	if j.CheckFinished() {
+		task.SetLog("Задача завершилась преждевременно из-за таймаута")
+		task.SaveLog()
+		return false, "Timeout"
+	}
+
 	// Запускаем функцию перебора вопросов
 	settings := j.ParsingPaa(&stats)
+
+	if j.CheckFinished() {
+		if j.IsStart {
+			j.task.SetLog("Задача завершилась преждевременно из-за таймаута")
+			j.task.SaveLog()
+		}
+		return false, "Timeout"
+	}
+
 	task.SetLog("Обнаружено блоков: " + strconv.Itoa(stats.All))
 
 	//if stats.Yt < stats.S && stats.S >= task.QaCountFrom {
@@ -352,7 +338,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 			// Завершение работы скрипта
 			task.SetError(msg)
-			j.Cancel()
 			return false, msg
 
 		} else if stats.S <= task.QaCountFrom {}
@@ -376,7 +361,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			"link" : setting.Link,
 			"link_title" : setting.LinkTitle,
 		}); err != nil {
-			log.Println(err)
+			log.Println("JobHandler.Run.5", err)
 			task.SetLog("Не сохранился результат. (" + err.Error() + ")")
 		}
 
@@ -386,10 +371,10 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				"cat_id" : strconv.Itoa(task.CatId),
 				"parent_id" : strconv.Itoa(task.Id),
 				"keyword" : setting.Question,
-				"parser" : "",
+				"parser" : strconv.Itoa(parser),
 				"error" : "",
 			}); err != nil {
-				log.Println(err)
+				log.Println("JobHandler.Run.6", err)
 				task.SetLog("Не добавилась новая задача. (" + err.Error() + ")")
 			}
 		}
@@ -428,7 +413,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		if !wp.CheckConn() {
 			task.SetError("Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")")
 			task.SetError(wp.err.Error())
-			j.Cancel()
 			return false, "Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")"
 		}
 
@@ -516,19 +500,31 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		task.SetLog("Парсим видео")
 
+		if j.CheckFinished() {
+			task.SetLog("Задача завершилась преждевременно из-за таймаута")
+			task.SaveLog()
+			return false, "Timeout"
+		}
+
+		task.SaveLog()
+
 		// Парсим видео
 		var videosHtml string
 		if err := chromedtp.Run(j.ctx,
-			chromedtp.Sleep(time.Second * time.Duration(int64(rand.Intn(10)))),
+			chromedtp.Sleep(time.Second * time.Duration(rand.Intn(15))),
 			// Устанавливаем страницу для парсинга
 			chromedtp.Navigate("https://www.youtube.com/results?search_query=" + task.Keyword),
-			// Ждём блоков с видео
-			chromedtp.WaitVisible(`a.ytd-thumbnail`, chromedtp.ByQueryAll),
 			// Вытащить html со списком
 			chromedtp.OuterHTML("#contents.ytd-section-list-renderer", &videosHtml, chromedtp.ByQuery),
 		); err != nil {
-			log.Println(err)
-			task.SetLog("Спарсилось видео. (" + err.Error() + ")")
+			log.Println("JobHandler.Run.7", err)
+			task.SetLog("Видео не спарсилось. (" + err.Error() + ")")
+		}
+
+		if j.CheckFinished() {
+			task.SetLog("Задача завершилась преждевременно из-за таймаута")
+			task.SaveLog()
+			return false, "Timeout"
 		}
 
 		var videos []string
@@ -538,7 +534,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			videoReader := strings.NewReader(videosHtml)
 			doc, err := goquery.NewDocumentFromReader(videoReader)
 			if err != nil {
-				log.Println(err)
+				log.Println("JobHandler.Run.8", err)
 				task.SetLog("Неразборчивый код из youtube. (" + err.Error() + ")")
 			}
 
@@ -604,20 +600,24 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 				// Загружаем фото в Вордпресс
 				//TOdO $tmp = $this->xmlrpc->photo($photo['url'], $task->keyword);
-				res := wp.UploadFile("", "", "", "", 0)
+				res, _ := wp.UploadFile(photo.Url, 0)
+				if res.Url != "" {
+					task.SetLog("Фото загружено на сайт")
 
-				task.SetLog("Фото загружено на сайт")
+					// Обрабатываем результат добавления фото в Вордпресс
+					qaTotalPage.PhotoId = res.Id
+					photo.Url = res.Url
+					photo.UrlMedium = res.UrlMedium
 
-				// Обрабатываем результат добавления фото в Вордпресс
-				qaTotalPage.PhotoId = res["id"].(int)
-				photo.Url = res["url"].(string)
-				photo.UrlMedium = res["url_medium"].(string)
-
-				// Готовим код вставки фото в текст
-				if task.PubImage >= 2 {
-					mainImg = `<p><img class="alignright size-medium" src="` + photo.UrlMedium + `"></p>` + "\n"
+					// Готовим код вставки фото в текст
+					if task.PubImage >= 2 {
+						mainImg = `<p><img class="alignright size-medium" src="` + photo.UrlMedium + `"></p>` + "\n"
+					}
+				}else if photo.Url != "" {
+					task.SetLog("Фото (" + photo.Url + ") не загрузилось на сайт")
+				}else {
+					task.SetLog("Фото не найдено для поста")
 				}
-
 			}
 		}
 		// Пробегаемся по всем блокам
@@ -628,14 +628,15 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				item.Text = strings.ReplaceAll(item.Text, "</h3>", "</strong>")
 			}
 
-			//	// Вставляем видео в текст
+			var firstVideo string
+			// Вставляем видео в текст
 			if task.VideoStep < 1 {
 				if k == (qaCount - 2) {
 					if lastVideo != "" {
 						qaTotalPage.Content += `<div class="mb-5"><iframe src="` + lastVideo + `" width="740" height="520" frameborder="0" allowfullscreen="allowfullscreen"></iframe></div>` + "\n"
 					}
 				}else if len(videos) > 0 && k > 0 && k < (qaCount - 2) && k % vStep == 0 {
-					firstVideo, _ := videos[0], videos[1:]
+					firstVideo, videos = videos[0], videos[1:]
 					if firstVideo != "" {
 						qaTotalPage.Content += `<div class="mb-5"><iframe src="` + firstVideo + `" width="740" height="520" frameborder="0" allowfullscreen="allowfullscreen"></iframe></div>` + "\n"
 					}
@@ -646,7 +647,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 						qaTotalPage.Content += `<div class="mb-5"><iframe src="` + lastVideo + `" width="740" height="520" frameborder="0" allowfullscreen="allowfullscreen"></iframe></div>` + "\n"
 					}
 				}else if len(videos) > 0 && k > 0 && k < (qaCount - 1) && k % vStep == 0 {
-					firstVideo, _ := videos[0], videos[1:]
+					firstVideo, videos = videos[0], videos[1:]
 					if firstVideo != "" {
 						qaTotalPage.Content += `<div class="mb-5"><iframe src="` + firstVideo + `" width="740" height="520" frameborder="0" allowfullscreen="allowfullscreen"></iframe></div>` + "\n"
 					}
@@ -720,10 +721,16 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			return false, "Снята с публикации — слишком короткая статья получилась"
 		}
 
+		if j.CheckFinished() {
+			task.SetLog("Задача завершилась преждевременно из-за таймаута")
+			task.SaveLog()
+			return false, "Timeout"
+		}
+
 		// Определяем ID категории
 		qaTotalPage.CatId = wp.CatIdByName(task.Cat)
 		if qaTotalPage.CatId < 1 {
-			task.SetError("Проблема с размещением в рубрику")
+			task.SetLog("Проблема с размещением в рубрику")
 			task.SetError(wp.err.Error())
 			j.Cancel()
 			return false, "Проблема с размещением в рубрику"
@@ -762,41 +769,34 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	task.SetFinished(1, "")
 	fmt.Println(taskId)
 	j.Cancel()
-
 	return true, "Задача #" + strconv.Itoa(taskId) + " была успешно выполнена"
-}
-
-func (j *JobHandler) AntiCaptcha(urlKey string) {
-	c := &Captcha{APIKey: j.config.Antigate.String}
-
-	key, err := c.SendRecaptcha(
-		"http://http.myjino.ru/recaptcha/test-get.php", // url that has the recaptcha
-		"6Lc_aCMTAAAAABx7u2W0WPXnVbI_v6ZdbM6rYf16", // the recaptcha key
-		time.Minute,
-	)
-	if err != nil {
-		fmt.Println(err)
-	}else{
-		fmt.Println(key)
-	}
 }
 
 func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 	var paaHtml string
 	settings := map[string]QaSetting{}
 
+	if j.CheckFinished() {
+		j.IsStart = false
+		j.task.SetLog("Задача завершилась преждевременно из-за таймаута")
+		j.task.SaveLog()
+		return settings
+	}
+
 	// Вытягиваем html код PAA для парсинга вопросов
 	if err := chromedtp.Run(j.ctx,
 		chromedtp.OuterHTML(`.kno-kp .ifM9O`, &paaHtml, chromedtp.ByQuery),
 	); err != nil {
-		log.Println(err)
+		log.Println("JobHandler.ParsingPaa", err)
+		return settings
 	}
 
 	// Загружаем HTML документ в GoQuery пакет который организует облегчённую работу с HTML селекторами
 	paaReader := strings.NewReader(paaHtml)
 	doc, err := goquery.NewDocumentFromReader(paaReader)
 	if err != nil {
-		log.Println(err)
+		log.Println("JobHandler.ParsingPaa.2", err)
+		return settings
 	}
 
 	var tasks chromedtp.Tasks
@@ -835,7 +835,7 @@ func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 				// Собираем задачи для кликинга по вопросам
 				if _, ok := settings[ved]; !ok {
 					tasks = append(tasks, chromedtp.Click(".cbphWd[data-ved=\""+ved+"\"]"))
-					tasks = append(tasks, chromedtp.Sleep(time.Millisecond*500))
+					tasks = append(tasks, chromedtp.Sleep(time.Second * time.Duration(rand.Intn(10))))
 					clicked[ved] = true
 				}
 
@@ -851,8 +851,14 @@ func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 
 	// Проверяем есть ли уже достаточное количество вопросов или всё таки нужно продолжить кликинг по блокам
 	if stats.All < stats.Wqc && len(tasks) > 0 {
-		if err := chromedtp.Run(j.ctx, tasks); err != nil {
-			log.Println(err)
+		dest := make(chromedtp.Tasks, len(tasks))
+		perm := rand.Perm(len(tasks))
+		for i, v := range perm {
+			dest[v] = tasks[i]
+		}
+		if err := chromedtp.Run(j.ctx, dest); err != nil {
+			log.Println("JobHandler.ParsingPaa.3", err)
+			return settings
 		}
 		for k, v := range clicked {
 			if setting, ok := settings[k]; ok {
@@ -870,7 +876,7 @@ func (j *JobHandler) SetFastAnswer(html string) {
 	htmlReader := strings.NewReader(html)
 	doc, err := goquery.NewDocumentFromReader(htmlReader)
 	if err != nil {
-		log.Println(err)
+		log.Println("JobHandler.SetFastAnswer", err)
 	}
 
 	fastSelector := doc.Find(".kp-blk.c2xzTb")
@@ -886,4 +892,13 @@ func (j *JobHandler) CheckPaa(html string) bool {
 
 func (j *JobHandler) CheckCaptcha(html string) bool {
 	return strings.Contains(html,"g-recaptcha") && strings.Contains(html,"data-sitekey")
+}
+
+func (j *JobHandler) CheckFinished() bool {
+	select {
+	case <-j.isFinished:
+		return true
+	default:
+		return false
+	}
 }

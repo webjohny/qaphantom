@@ -33,8 +33,8 @@ func (p *Proxy) NewProxy() {
 	p.LocalIp = p.Host + ":" + p.Port
 }
 
-func (p Proxy) SetTimeout(parser int) sql.Result {
-	now := time.Now().Local().Add(time.Minute * time.Duration(5))
+func (p Proxy) SetTimeout(parser int, minutes int) sql.Result {
+	now := time.Now().Local().Add(time.Minute * time.Duration(minutes))
 	formattedDate := now.Format("2006-01-02 15:04:05")
 
 	data := map[string]interface{}{}
@@ -50,9 +50,12 @@ func (p Proxy) SetTimeout(parser int) sql.Result {
 }
 
 func (p Proxy) FreeProxy() {
+	now := time.Now().Local().Add(time.Minute * time.Duration(2))
+	formattedDate := now.Format("2006-01-02 15:04:05")
+
 	data := map[string]interface{}{}
 	data["parser"] = "NULL"
-	data["timeout"] = "NULL"
+	data["timeout"] = formattedDate
 
 	_, err := mysql.UpdateProxy(data, p.Id)
 	if err != nil {

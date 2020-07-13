@@ -11,18 +11,15 @@ import (
 	"time"
 )
 
-var checkLoopCollect bool = false
+var checkLoopCollect = false
 
-func ShuffleSites(sites []MysqlSite) {
-	for i := 1; i < len(sites); i++ {
-		r := rand.Intn(i + 1)
-		if i != r {
-			sites[r], sites[i] = sites[i], sites[r]
-		}
-	}
+func ShuffleSites(sites []MysqlSite) []MysqlSite {
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(sites), func(i, j int) { sites[i], sites[j] = sites[j], sites[i] })
+	return sites
 }
 
-func (m *MysqlDb) GetFreeTask(ids []string) MysqlFreeTask {
+func (m *MysqlDb) GetFreeTask(id int) MysqlFreeTask {
 	var freeTask MysqlFreeTask
 	var sites []MysqlSite
 
@@ -32,9 +29,9 @@ func (m *MysqlDb) GetFreeTask(ids []string) MysqlFreeTask {
 
 	err := m.db.Select(&sites, sqlSite)
 	if err != nil{
-		log.Println(err)
+		log.Println("MysqlDb.GetFreeTask", err)
 	}
-	ShuffleSites(sites)
+	sites = ShuffleSites(sites)
 
 	var site MysqlSite
 	var siteId int64
@@ -60,21 +57,29 @@ func (m *MysqlDb) GetFreeTask(ids []string) MysqlFreeTask {
 		}
 		randomOffset = rand.Intn(randomOffset)
 
-		sqlQuery := "SELECT t.id, t.keyword, t.try_count, c.title AS cat, t.site_id, t.cat_id FROM tasks t"
-		sqlQuery += " LEFT JOIN cats c ON (c.id = t.cat_id)"
-		sqlQuery += " WHERE t.site_id = "
-		sqlQuery += strconv.Itoa(int(siteId))
-		sqlQuery += " AND (t.try_count IS NULL OR t.try_count <= 5)"
-		sqlQuery += " AND (t.status IS NULL OR t.status = 0) AND (t.timeout is NULL OR t.timeout < '"
-		sqlQuery += now
-		sqlQuery += "') ORDER BY RAND() LIMIT 1"
-
-		var tasks []MysqlTask
-		err := m.db.Select(&tasks, sqlQuery)
-		if err != nil{
-			log.Println(err)
+		var sqlQuery string
+		if id > 0 {
+			sqlQuery = "SELECT t.id, t.keyword, t.try_count, c.title AS cat, t.site_id, t.cat_id FROM tasks t"
+			sqlQuery += " LEFT JOIN cats c ON (c.id = t.cat_id)"
+			sqlQuery += " AND t.id = " + strconv.Itoa(id)
+		}else{
+			sqlQuery = "SELECT t.id, t.keyword, t.try_count, c.title AS cat, t.site_id, t.cat_id FROM tasks t"
+			sqlQuery += " LEFT JOIN cats c ON (c.id = t.cat_id)"
+			sqlQuery += " WHERE t.site_id = "
+			sqlQuery += strconv.Itoa(int(siteId))
+			sqlQuery += " AND (t.try_count IS NULL OR t.try_count <= 5)"
+			sqlQuery += " AND (t.status IS NULL OR t.status = 0) AND (t.timeout is NULL OR t.timeout < '"
+			sqlQuery += now
+			sqlQuery += "') ORDER BY RAND() LIMIT 1"
 		}
-		task := tasks[0]
+
+		fmt.Println(sqlQuery)
+
+		var task MysqlTask
+		err := m.db.Get(&task, sqlQuery)
+		if err != nil{
+			log.Println("MysqlDb.GetFreeTask.2", err)
+		}
 		freeTask.MergeTask(task)
 		freeTask.SavingAvailable = freeTask.QstsLimit > freeTask.CountRows
 	}
@@ -87,7 +92,7 @@ func (m *MysqlDb) GetCountTasks(params map[string]interface{}) int {
 	for rows.Next() {
 		err := rows.Scan(&count)
 		if err != nil {
-			log.Println(err)
+			log.Println("MysqlDb.GetCountTasks", err)
 		}
 	}
 	return count
@@ -118,7 +123,7 @@ func (m *MysqlDb) GetTasks(params map[string]interface{}) []MysqlTask {
 
 	err := m.db.Select(&results, sqlQuery)
 	if err != nil {
-		panic(err)
+		log.Println("MysqlDb.GetTasks", err)
 	}
 
 	return results
@@ -319,7 +324,7 @@ func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 			for k, v := range stat {
 				info, err := json.Marshal(v)
 				if err != nil {
-					log.Println(err)
+					log.Println("MysqlDb.CollectStats", err)
 				}
 				item := map[string]interface{}{
 					"info": info,
@@ -327,7 +332,7 @@ func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 				res, err := m.UpdateSite(item, int(k))
 				fmt.Println(res)
 				if err != nil {
-					log.Println(err)
+					log.Println("MysqlDb.CollectStats.2", err)
 				}
 			}
 		}

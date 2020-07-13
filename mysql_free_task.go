@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
@@ -67,7 +68,7 @@ func (t *MysqlFreeTask) SetFinished(status int, errorMsg string) {
 
 	_, err := mysql.UpdateTask(data, t.Id)
 	if err != nil {
-		log.Println(err)
+		log.Println("MysqlFreeTask.SetFinished", err)
 	}
 }
 
@@ -90,7 +91,7 @@ func (t *MysqlFreeTask) FreeTask() {
 
 	_, err := mysql.UpdateTask(data, t.Id)
 	if err != nil {
-		log.Println(err)
+		log.Println("MysqlFreeTask.FreeTask", err)
 	}
 }
 
@@ -111,7 +112,7 @@ func (t *MysqlFreeTask) SetTimeout(parser int) {
 
 	_, err := mysql.UpdateTask(data, t.Id)
 	if err != nil {
-		log.Println(err)
+		log.Println("MysqlFreeTask.SetTimeout", err)
 	}
 }
 
@@ -134,7 +135,7 @@ func (t *MysqlFreeTask) SetError(error string) {
 
 	_, err := mysql.UpdateTask(data, t.Id)
 	if err != nil {
-		log.Println(err)
+		log.Println("MysqlFreeTask.SetError", err)
 	}
 }
 
@@ -142,14 +143,48 @@ func (t *MysqlFreeTask) SetLog(text string) {
 	if text == "" {
 		return
 	}
+
+	timePoint := time.Now()
+	text = timePoint.Format("2006-01-02 15:04:05") + " " + text
 	fmt.Println(text)
 	t.Log = append(t.Log, text)
 }
 
+func (t *MysqlFreeTask) SaveLog() {
+	data := map[string]interface{}{}
+	data["log"] = strings.Join(t.Log, "\n")
+	data["log_last"] = t.Log[len(t.Log) - 1]
+
+	_, err := mysql.UpdateTask(data, t.Id)
+	if err != nil {
+		log.Println("MysqlFreeTask.SaveLog", err)
+	}
+}
+
 func (t *MysqlFreeTask) GetRandSymb() string {
-	return ","
+	symbs := t.SymbMicroMarking
+	if symbs != "" && symbs != "[]" {
+		var arr []string
+		err := json.Unmarshal([]byte(symbs), &arr)
+		if err != nil {
+			log.Println("MysqlFreeTask.GetRandSymb", err)
+		}else {
+			return utils.ArrayRand(arr)
+		}
+	}
+	return ""
 }
 
 func (t *MysqlFreeTask) GetRandTag() string {
-	return "More items"
+	moreTags := t.MoreTags
+	if moreTags != "" && moreTags != "[]" {
+		var arr []string
+		err := json.Unmarshal([]byte(moreTags), &arr)
+		if err != nil {
+			log.Println("MysqlFreeTask.GetRandTag", err)
+		}else {
+			return utils.ArrayRand(arr)
+		}
+	}
+	return ""
 }

@@ -1,10 +1,17 @@
 package main
 
 import (
-	xmlrpc "github.com/abcdsxg/go-wordpress-xmlrpc"
+	"encoding/base64"
+	"fmt"
+	wpXmlrpc "github.com/abcdsxg/go-wordpress-xmlrpc"
 	"github.com/gosimple/slug"
+	"github.com/kolo/xmlrpc"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"path"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -32,13 +39,19 @@ type WpPost struct {
 }
 
 type Wordpress struct {
-	client *xmlrpc.Client
+	client *wpXmlrpc.Client
 	cnf []interface{}
 	err error
 }
 
-func (w *Wordpress) Connect(url string, username string, password string, blogId int) *xmlrpc.Client {
-	c, err := xmlrpc.NewClient(url, xmlrpc.UserInfo{
+type WpImage struct {
+	Id int
+	Url string
+	UrlMedium string
+}
+
+func (w *Wordpress) Connect(url string, username string, password string, blogId int) *wpXmlrpc.Client {
+	c, err := wpXmlrpc.NewClient(url, wpXmlrpc.UserInfo{
 		username,
 		password,
 	})
@@ -223,30 +236,53 @@ func (w *Wordpress) CheckConn() bool {
 	return w.client != nil
 }
 
-func (w *Wordpress) UploadFile(name string, mime string, bits string, overwrite string, postId int) map[string]interface{} {
+func (w *Wordpress) UploadFile(url string, postId int) (WpImage, error) {
+	var image WpImage
+
+	resp, _ := http.Get(url)
+	defer resp.Body.Close()
+
+	bytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Print(err)
+		return image, err
+	}
+	mime := http.DetectContentType(bytes)
+	name := path.Base(url)
+
+	encoded := base64.StdEncoding.EncodeToString(bytes)
+
 	params := map[string]interface{}{
 		"name": name,
 		"type": mime,
-		"bits": bits,
-	}
-	if overwrite != "" {
-		params["overwrite"] = overwrite
+		"bits": xmlrpc.Base64(encoded),
 	}
 	if postId != 0 {
 		params["post_id"] = postId
 	}
 
-	var result map[string]interface{}
-	err := w.client.Client.Call(`wp.uploadFile`, append(
+	var response map[string]interface{}
+	err = w.client.Client.Call(`wp.uploadFile`, append(
 		w.cnf, params,
-	), &result)
+	), &response)
 	if err != nil {
 		log.Println(err)
 		w.err = err
-		return result
+		image.Id = response["id"].(int)
+		image.Url = response["link"].(string)
+		image.UrlMedium = response["link"].(string)
+		metadata := response["metadata"].(map[string]interface{})
+		title := response["title"].(string)
+		if response["metadata"] != "" {
+			sites := metadata["sites"].(map[string]map[string]string)
+			if sites["medium"]["file"] != "" {
+				image.UrlMedium = strings.Replace(image.UrlMedium, title, sites["medium"]["file"], 1)
+			}
+		}
+		return image, err
 	}
 
-	return result
+	return image, nil
 }
 
 func (w *Wordpress) CatIdByName(name string) int {

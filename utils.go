@@ -22,7 +22,13 @@ func (u *Utils) MysqlRealEscapeString(value string) string {
 		value = strings.Replace(value, b, a, -1)
 	}
 
-	return value;
+	return value
+}
+
+func (u *Utils) ArrayRand(arr []string) string {
+	rand.Seed(time.Now().Unix())
+	n := rand.Int() % len(arr)
+	return arr[n]
 }
 
 func (u *Utils) SetInterval(someFunc func(), milliseconds int, async bool) chan bool {

@@ -17,7 +17,7 @@ func (m *MysqlDb) GetAgents() []MysqlUagent {
 
 	err := m.db.Select(&agents, sqlQuery)
 	if err != nil {
-		log.Println(err)
+		log.Println("MysqlUAgent.GetAgents.HasError", err)
 	}
 
 	return agents

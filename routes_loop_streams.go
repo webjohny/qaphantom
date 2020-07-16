@@ -13,7 +13,7 @@ func (rt *Routes) ReStartStreams(count int, limit int, cmd string) {
 	fmt.Println("Restarted streams")
 	rt.streams.StopAllWithoutClean()
 	time.Sleep(time.Second * 600)
-	go rt.StartStreams(count, limit, cmd)
+	rt.StartStreams(count, limit, cmd)
 }
 
 func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +44,7 @@ func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
 		"status": true,
 	})
 	if err != nil {
-		log.Println("Routes.StartLoopStreams", err)
+		log.Println("Routes.StartLoopStreams.HasError", err)
 	}
 }
 
@@ -56,7 +56,7 @@ func (rt *Routes) StopLoopStreams(w http.ResponseWriter, r *http.Request) {
 		"status": true,
 	})
 	if err != nil {
-		log.Println("Routes.StopLoopStreams", err)
+		log.Println("Routes.StopLoopStreams.HasError", err)
 	}
 }
 
@@ -65,6 +65,6 @@ func (rt *Routes) CountLoopStreams(w http.ResponseWriter, r *http.Request) {
 
 	_, err := fmt.Fprintln(w, strconv.Itoa(count))
 	if err != nil {
-		log.Println("Routes.CountLoopStreams", err)
+		log.Println("Routes.CountLoopStreams.HasError", err)
 	}
 }

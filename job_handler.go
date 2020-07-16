@@ -17,7 +17,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gosimple/slug"
-	"github.com/webjohny/chromedtp"
+	"github.com/webjohny/chromedp"
 )
 
 type JobHandler struct {
@@ -87,7 +87,7 @@ func (j *JobHandler) AntiCaptcha(url string, html string) (string, error) {
 	paaReader := strings.NewReader(html)
 	doc, err := goquery.NewDocumentFromReader(paaReader)
 	if err != nil {
-		log.Println(err)
+		log.Println("JobHandler.AntiCaptcha.HasError", err)
 		return "", err
 	}
 
@@ -110,7 +110,7 @@ func (j *JobHandler) AntiCaptcha(url string, html string) (string, error) {
 
 	key, err := c.SendRecaptcha()
 	if err != nil {
-		log.Println(err)
+		log.Println("JobHandler.AntiCaptcha.2.HasError", err)
 	}
 	return key, err
 }
@@ -160,12 +160,15 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		task = mysql.GetFreeTask(j.taskId)
 	}
 
-	fmt.Println(task.Id)
+	//log.Fatal(task)
+
 	if task.Id < 1 {
 		go j.Cancel()
 		return false, "Свободных задач нет в наличии"
 	}
 	taskId = task.Id
+	task.Domain = task.GetRandDomain()
+
 	j.task = task
 
 	if j.CheckFinished() {
@@ -199,7 +202,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	j.config = mysql.GetConfig()
 
-	for i := 1; i < 4; i++ {
+	for i := 1; i < 2; i++ {
 
 		if j.CheckFinished() {
 			task.SetLog("Задача завершилась преждевременно из-за таймаута")
@@ -211,18 +214,18 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		googleUrl = "https://www.google.com/search?hl=en&q=" + url.QueryEscape(task.Keyword)
 		task.SetLog("Открываем страницу (попытка №" + strconv.Itoa(i) + "): " + googleUrl)
 
-		if err := chromedtp.Run(j.ctx,
+		if err := chromedp.Run(j.ctx,
 			// Устанавливаем страницу для парсинга
-			chromedtp.Navigate(googleUrl),
-			chromedtp.Sleep(time.Second * time.Duration(rand.Intn(10))),
-			chromedtp.WaitVisible("body", chromedtp.ByQuery),
+			//chromedp.Sleep(time.Second * 60),
+			chromedp.Navigate(googleUrl),
+			chromedp.Sleep(time.Second * time.Duration(rand.Intn(10))),
+			chromedp.WaitVisible("body", chromedp.ByQuery),
 			// Вытащить html на проверку каптчи
-			chromedtp.OuterHTML("body", &searchHtml, chromedtp.ByQuery),
+			chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
 		); err != nil {
-			log.Println("JobHandler.Run", err)
+			log.Println("JobHandler.Run.HasError", err)
 			task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
 			task.SaveLog()
-			j.Reload()
 			continue
 		}else{
 			if j.CheckCaptcha(searchHtml) {
@@ -235,23 +238,22 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				key := ""
 				if key != "" {
 					task.SetLog("Anticaptcha: " + key)
-					if err := chromedtp.Run(j.ctx,
-						chromedtp.WaitVisible("captcha-form", chromedtp.ByID),
-						chromedtp.WaitVisible("g-recaptcha-response", chromedtp.ByID),
-						chromedtp.ActionFunc(func(ctx context.Context) error {
+					if err := chromedp.Run(j.ctx,
+						chromedp.WaitVisible("captcha-form", chromedp.ByID),
+						chromedp.WaitVisible("g-recaptcha-response", chromedp.ByID),
+						chromedp.ActionFunc(func(ctx context.Context) error {
 							fmt.Println("Yes")
 							return nil
 						}),
-						chromedtp.SetValue(`g-recaptcha-response`, key, chromedtp.ByID),
-						chromedtp.Submit(`captcha-form`, chromedtp.ByID),
-						chromedtp.Sleep(time.Second * 5),
-						chromedtp.WaitVisible("body", chromedtp.ByQuery),
-						chromedtp.OuterHTML("body", &searchHtml, chromedtp.ByQuery),
+						chromedp.SetValue(`g-recaptcha-response`, key, chromedp.ByID),
+						chromedp.Submit(`captcha-form`, chromedp.ByID),
+						chromedp.Sleep(time.Second * 5),
+						chromedp.WaitVisible("body", chromedp.ByQuery),
+						chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
 					); err != nil {
-						log.Println("JobHandler.Run.2", err)
+						log.Println("JobHandler.Run.2.HasError", err)
 						task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
 						task.SaveLog()
-						j.Reload()
 						continue
 					}
 					if searchHtml != "" {
@@ -268,14 +270,13 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 					}
 				}else{
 					task.SetError("Антикаптча не сработала для " + j.Browser.Proxy.LocalIp + "...")
-					j.Reload()
 					continue
 				}
 			}
 
 			if !j.CheckPaa(searchHtml) {
 				task.SetError("Отсутствует PAA.")
-				j.Cancel()
+				go j.Cancel()
 				return false, "Отсутствует PAA."
 			}
 			break
@@ -295,15 +296,21 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	j.SetFastAnswer(searchHtml)
 
 	searchHtml = ""
-	if err := chromedtp.Run(j.ctx,
+
+	duration := time.Duration(rand.Intn(8))
+	if !j.task.Extra.DeepPaa {
+		duration = time.Duration(1)
+	}
+
+	if err := chromedp.Run(j.ctx,
 		// Кликаем сразу на первый вопрос
-		chromedtp.Click(".related-question-pair:first-child .cbphWd"),
+		chromedp.Click(".related-question-pair:first-child .cbphWd"),
 		// Ждём 0.3 секунды чтобы открылся вопрос
-		chromedtp.Sleep(time.Second * time.Duration(rand.Intn(8))),
+		chromedp.Sleep(time.Second * duration),
 	); err != nil {
-		log.Println("JobHandler.Run.4", err)
+		log.Println("JobHandler.Run.4.HasError", err)
 		task.SetError("Отсутствует PAA. (" + err.Error() + ")")
-		j.Cancel()
+		go j.Cancel()
 		return false, "Отсутствует PAA."
 	}
 
@@ -314,7 +321,12 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	}
 
 	// Запускаем функцию перебора вопросов
-	settings := j.ParsingPaa(&stats)
+	var settings map[string]QaSetting
+	if task.Extra.RedirectMethod {
+		settings = j.RedirectParsing(&stats)
+	}else{
+		settings = j.ClickParsing(&stats)
+	}
 
 	if j.CheckFinished() {
 		if j.IsStart {
@@ -361,11 +373,11 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			"link" : setting.Link,
 			"link_title" : setting.LinkTitle,
 		}); err != nil {
-			log.Println("JobHandler.Run.5", err)
+			log.Println("JobHandler.Run.5.HasError", err)
 			task.SetLog("Не сохранился результат. (" + err.Error() + ")")
 		}
 
-		if task.SavingAvailable {
+		if task.SavingAvailable && !mysql.GetTaskByKeyword(setting.Question).Id.Valid {
 			if _, err := mysql.AddTask(map[string]interface{}{
 				"site_id" : strconv.Itoa(task.SiteId),
 				"cat_id" : strconv.Itoa(task.CatId),
@@ -374,7 +386,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				"parser" : strconv.Itoa(parser),
 				"error" : "",
 			}); err != nil {
-				log.Println("JobHandler.Run.6", err)
+				log.Println("JobHandler.Run.6.HasError", err)
 				task.SetLog("Не добавилась новая задача. (" + err.Error() + ")")
 			}
 		}
@@ -510,14 +522,15 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		// Парсим видео
 		var videosHtml string
-		if err := chromedtp.Run(j.ctx,
-			chromedtp.Sleep(time.Second * time.Duration(rand.Intn(15))),
+		if err := chromedp.Run(j.ctx,
+			chromedp.Sleep(time.Second * time.Duration(rand.Intn(10))),
 			// Устанавливаем страницу для парсинга
-			chromedtp.Navigate("https://www.youtube.com/results?search_query=" + task.Keyword),
+			chromedp.Navigate("https://www.youtube.com/results?search_query=" + task.Keyword),
 			// Вытащить html со списком
-			chromedtp.OuterHTML("#contents.ytd-section-list-renderer", &videosHtml, chromedtp.ByQuery),
+			chromedp.Sleep(time.Second * 4),
+			chromedp.OuterHTML("body", &videosHtml, chromedp.ByQuery),
 		); err != nil {
-			log.Println("JobHandler.Run.7", err)
+			log.Println("JobHandler.Run.7.HasError", err)
 			task.SetLog("Видео не спарсилось. (" + err.Error() + ")")
 		}
 
@@ -534,12 +547,12 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			videoReader := strings.NewReader(videosHtml)
 			doc, err := goquery.NewDocumentFromReader(videoReader)
 			if err != nil {
-				log.Println("JobHandler.Run.8", err)
+				log.Println("JobHandler.Run.8.HasError", err)
 				task.SetLog("Неразборчивый код из youtube. (" + err.Error() + ")")
 			}
 
 			// Начинаем перебор блоков с видео
-			doc.Find("a.ytd-thumbnail").Each(func(i int, s *goquery.Selection) {
+			doc.Find("#contents.ytd-section-list-renderer").Find("a.ytd-thumbnail").Each(func(i int, s *goquery.Selection) {
 				if len(videos) != vCount {
 					link, _ := s.Attr("href")
 					videos = append(videos, utils.YoutubeEmbed(link))
@@ -717,7 +730,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		task.SetLog("Текст статьи сохранён в БД")
 		if (task.QaCountFrom > 0 && len(qaQs) < task.QaCountFrom) || (task.From > 0 && utf8.RuneCountInString(qaTotalPage.Content) < task.From) {
 			task.SetError("Снята с публикации — слишком короткая статья получилась")
-			j.Cancel()
+			go j.Cancel()
 			return false, "Снята с публикации — слишком короткая статья получилась"
 		}
 
@@ -732,7 +745,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		if qaTotalPage.CatId < 1 {
 			task.SetLog("Проблема с размещением в рубрику")
 			task.SetError(wp.err.Error())
-			j.Cancel()
+			go j.Cancel()
 			return false, "Проблема с размещением в рубрику"
 		}
 
@@ -758,7 +771,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		if fault {
 			task.SetLog("Не получилось разместить статью на сайте")
 			task.SetError(wp.err.Error())
-			j.Cancel()
+			go j.Cancel()
 			return false, "Не получилось разместить статью на сайте"
 		}
 
@@ -768,11 +781,101 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	}
 	task.SetFinished(1, "")
 	fmt.Println(taskId)
-	j.Cancel()
+	go j.Cancel()
 	return true, "Задача #" + strconv.Itoa(taskId) + " была успешно выполнена"
 }
 
-func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
+func (j *JobHandler) RedirectParsing(stats *QaStats) map[string]QaSetting {
+	var paaHtml string
+	settings := map[string]QaSetting{}
+
+	if j.CheckFinished() {
+		j.IsStart = false
+		j.task.SetLog("Задача завершилась преждевременно из-за таймаута")
+		j.task.SaveLog()
+		return settings
+	}
+
+	for i := 0; i < stats.Wqc; i++ {
+		// Вытягиваем html код PAA для парсинга вопросов
+		if err := chromedp.Run(j.ctx,
+			chromedp.OuterHTML(`.kno-kp .ifM9O`, &paaHtml, chromedp.ByQuery),
+		); err != nil {
+			log.Println("JobHandler.RedirectParsing.HasError", err)
+			return settings
+		}
+
+		// Загружаем HTML документ в GoQuery пакет который организует облегчённую работу с HTML селекторами
+		paaReader := strings.NewReader(paaHtml)
+		doc, err := goquery.NewDocumentFromReader(paaReader)
+		if err != nil {
+			log.Println("JobHandler.RedirectParsing.2.HasError", err)
+			return settings
+		}
+
+		var lastQuestion string
+
+		// Начинаем перебор блоков с вопросами
+		doc.Find(".related-question-pair").Each(func(i int, s *goquery.Selection) {
+			question := s.Find(".cbphWd").Text()
+			link, _ := s.Find(".g a").Attr("href")
+
+			// Ищем дату в блоке, она может быть или в div (если вне текста) или в span (если внутри текста)
+			date := s.Find(".kX21rb").Text()
+			if date == "" {
+				date = s.Find(".Od5Jsd").Text()
+			}
+			text := strings.Replace(s.Find(".mod").Text(), date, "", -1)
+			txtTtml, _ := s.Find(".mod").Html()
+
+			if j.task.ParseDoubles > 0 || !mysql.GetResultByQAndA(question, text).Id.Valid {
+				// Берём уникальный идентификатор для вопроса
+				stats.All++
+				ved, _ := s.Find(".cbphWd").Attr("data-ved")
+				if question != "" {
+					qa := QaSetting{}
+					qa.Question = question
+					qa.Text = text
+					qa.Html = txtTtml
+					qa.Link = link
+					qa.LinkTitle = s.Find(".g a").Text()
+					qa.Date = date
+					qa.Length = utf8.RuneCountInString(text) + utf8.RuneCountInString(question)
+					qa.Ved = ved
+					qa.Viewed = true
+
+					lastQuestion = question
+
+					stats.Length += qa.Length
+
+					if strings.Contains(txtTtml, "youtube.com/watch") || strings.Contains(txtTtml, "Suggested clip") {
+						stats.Yt++
+					}else{
+						stats.S++
+						settings[ved] = qa
+					}
+				}
+			}
+		})
+
+		// Проверяем есть ли уже достаточное количество вопросов или всё таки нужно продолжить кликинг по блокам
+		if stats.All < stats.Wqc {
+			// Вытягиваем html код PAA для парсинга вопросов
+			if err := chromedp.Run(j.ctx,
+				chromedp.Navigate("https://www.google.com/search?hl=en&q=" + url.QueryEscape(lastQuestion)),
+			); err != nil {
+				log.Println("JobHandler.RedirectParsing.HasError", err)
+				return settings
+			}
+		}else{
+			break
+		}
+	}
+
+	return settings
+}
+
+func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 	var paaHtml string
 	settings := map[string]QaSetting{}
 
@@ -784,10 +887,10 @@ func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 	}
 
 	// Вытягиваем html код PAA для парсинга вопросов
-	if err := chromedtp.Run(j.ctx,
-		chromedtp.OuterHTML(`.kno-kp .ifM9O`, &paaHtml, chromedtp.ByQuery),
+	if err := chromedp.Run(j.ctx,
+		chromedp.OuterHTML(`.kno-kp .ifM9O`, &paaHtml, chromedp.ByQuery),
 	); err != nil {
-		log.Println("JobHandler.ParsingPaa", err)
+		log.Println("JobHandler.ClickParsing.HasError", err)
 		return settings
 	}
 
@@ -795,16 +898,17 @@ func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 	paaReader := strings.NewReader(paaHtml)
 	doc, err := goquery.NewDocumentFromReader(paaReader)
 	if err != nil {
-		log.Println("JobHandler.ParsingPaa.2", err)
+		log.Println("JobHandler.ClickParsing.2.HasError", err)
 		return settings
 	}
 
-	var tasks chromedtp.Tasks
+	var tasks chromedp.Tasks
 	clicked := map[string]bool{}
 	// Начинаем перебор блоков с вопросами
 	doc.Find(".related-question-pair").Each(func(i int, s *goquery.Selection) {
 		question := s.Find(".cbphWd").Text()
 		link, _ := s.Find(".g a").Attr("href")
+		isExpanded :=  s.Find(".UgLoB").Length() > 0
 
 		// Ищем дату в блоке, она может быть или в div (если вне текста) или в span (если внутри текста)
 		date := s.Find(".kX21rb").Text()
@@ -834,9 +938,11 @@ func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 
 				// Собираем задачи для кликинга по вопросам
 				if _, ok := settings[ved]; !ok {
-					tasks = append(tasks, chromedtp.Click(".cbphWd[data-ved=\""+ved+"\"]"))
-					tasks = append(tasks, chromedtp.Sleep(time.Second * time.Duration(rand.Intn(10))))
-					clicked[ved] = true
+					if isExpanded {
+						tasks = append(tasks, chromedp.Click(".cbphWd[data-ved=\""+ved+"\"]"))
+						tasks = append(tasks, chromedp.Sleep(time.Second*time.Duration(rand.Intn(10))))
+						clicked[ved] = true
+					}
 				}
 
 				if strings.Contains(txtTtml, "youtube.com/watch") || strings.Contains(txtTtml, "Suggested clip") {
@@ -850,14 +956,14 @@ func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 	})
 
 	// Проверяем есть ли уже достаточное количество вопросов или всё таки нужно продолжить кликинг по блокам
-	if stats.All < stats.Wqc && len(tasks) > 0 {
-		dest := make(chromedtp.Tasks, len(tasks))
+	if stats.All < stats.Wqc && len(tasks) > 0 && j.task.Extra.DeepPaa {
+		dest := make(chromedp.Tasks, len(tasks))
 		perm := rand.Perm(len(tasks))
 		for i, v := range perm {
 			dest[v] = tasks[i]
 		}
-		if err := chromedtp.Run(j.ctx, dest); err != nil {
-			log.Println("JobHandler.ParsingPaa.3", err)
+		if err := chromedp.Run(j.ctx, dest); err != nil {
+			log.Println("JobHandler.ClickParsing.3.HasError", err)
 			return settings
 		}
 		for k, v := range clicked {
@@ -866,7 +972,7 @@ func (j *JobHandler) ParsingPaa(stats *QaStats) map[string]QaSetting {
 			}
 		}
 		// Продолжаем рекурсию
-		return j.ParsingPaa(stats)
+		return j.ClickParsing(stats)
 	}
 
 	return settings
@@ -876,7 +982,7 @@ func (j *JobHandler) SetFastAnswer(html string) {
 	htmlReader := strings.NewReader(html)
 	doc, err := goquery.NewDocumentFromReader(htmlReader)
 	if err != nil {
-		log.Println("JobHandler.SetFastAnswer", err)
+		log.Println("JobHandler.SetFastAnswer.HasError", err)
 	}
 
 	fastSelector := doc.Find(".kp-blk.c2xzTb")

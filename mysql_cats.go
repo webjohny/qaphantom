@@ -24,7 +24,7 @@ func (m *MysqlDb) GetCats(params map[string]interface{}, postData map[string]int
 
 	err := m.db.Select(&results, sqlQuery)
 	if err != nil {
-		log.Println(err)
+		log.Println("MysqlCats.GetCats.HasError", err)
 	}
 
 	return results

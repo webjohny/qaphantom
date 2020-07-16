@@ -11,7 +11,7 @@ func (m *MysqlDb) GetResultByQAndA(q string, a string) MysqlResult {
 
 	err := m.db.Get(&result, sqlQuery, q, a)
 	if err != nil {
-		//log.Println("MysqlDb.GetResultByQAndA", err)
+		//log.Println("MysqlDb.GetResultByQAndA.HasError", err)
 	}
 
 	return result

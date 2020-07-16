@@ -43,7 +43,7 @@ func (p Proxy) SetTimeout(parser int, minutes int) sql.Result {
 
 	res, err := mysql.UpdateProxy(data, p.Id)
 	if err != nil {
-		log.Println(err)
+		log.Println("Proxy.SetTimeout.HasError", err)
 	}
 
 	return res
@@ -59,6 +59,6 @@ func (p Proxy) FreeProxy() {
 
 	_, err := mysql.UpdateProxy(data, p.Id)
 	if err != nil {
-		log.Println(err)
+		log.Println("Proxy.FreeProxy.HasError", err)
 	}
 }

@@ -40,6 +40,6 @@ func (m *MysqlDb) Restart() {
 	cmd := exec.Command("service", "mysql restart")
 	log.Printf("Mysql restarting and waiting for it to finish...")
 	err := cmd.Run()
-	log.Printf("Command finished with error: %v", err)
+	log.Printf("Command finished with error: %v.HasError", err)
 	time.Sleep(time.Second * 5)
 }

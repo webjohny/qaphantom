@@ -17,3 +17,9 @@ You also need to remove or comment following lines:
 Close and save the file. Finally, restart mysql server:
 
 # service mysql restart
+
+#Uniqueize tasks
+CREATE TEMPORARY TABLE tmp_tab AS SELECT * FROM tasks GROUP BY keyword;
+DELETE FROM tasks;
+INSERT INTO tasks SELECT * FROM tmp_tab;
+DROP TABLE tmp_tab;

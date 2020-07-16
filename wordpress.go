@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/base64"
-	"fmt"
 	wpXmlrpc "github.com/abcdsxg/go-wordpress-xmlrpc"
 	"github.com/gosimple/slug"
 	"github.com/kolo/xmlrpc"
@@ -57,7 +56,7 @@ func (w *Wordpress) Connect(url string, username string, password string, blogId
 	})
 	if err != nil {
 		w.err = err
-		log.Println(err)
+		log.Println("Wordpress.Connect.HasError", err)
 		return nil
 	}
 	w.client = c
@@ -119,14 +118,16 @@ func (w *Wordpress) GetCats() []WpCat {
 	), &result)
 	if err != nil {
 		w.err = err
-		log.Println(err)
+		log.Println("Wordpress.GetCats.HasError", err)
 	}
-	res := result.([]interface{})
 	var cats []WpCat
-	if len(res) > 0 {
-		for _, item := range res {
-			cat := item.(map[string]interface{})
-			cats = append(cats, w.PrepareCat(cat))
+	if result != nil {
+		res := result.([]interface{})
+		if len(res) > 0 {
+			for _, item := range res {
+				cat := item.(map[string]interface{})
+				cats = append(cats, w.PrepareCat(cat))
+			}
 		}
 	}
 	return cats
@@ -156,6 +157,7 @@ func (w *Wordpress) NewTerm(name string, taxonomy string, slug string, descripti
 	), &result)
 	if err != nil {
 		w.err = err
+		log.Println("Wordpress.NewTerm.HasError", err)
 		return 0
 	}
 
@@ -168,8 +170,8 @@ func (w *Wordpress) GetPost(id int) WpPost {
 		w.cnf, id,
 	), &result)
 	if err != nil {
-		log.Println(err)
 		w.err = err
+		log.Println("Wordpress.GetPost.HasError", err)
 		return WpPost{}
 	}
 	res := result.(map[string]interface{})
@@ -191,8 +193,8 @@ func (w *Wordpress) EditPost(id int, title string, content string) bool {
 		w.cnf, id, params,
 	), &result)
 	if err != nil {
-		log.Println(err)
 		w.err = err
+		log.Println("Wordpress.EditPost.HasError", err)
 		return false
 	}
 	return result.(bool)
@@ -225,6 +227,7 @@ func (w *Wordpress) NewPost(title string, content string, catId int, photoId int
 	), &result)
 	if err != nil {
 		w.err = err
+		log.Println("Wordpress.NewPost.HasError", err)
 		return 0
 	}
 
@@ -244,7 +247,7 @@ func (w *Wordpress) UploadFile(url string, postId int) (WpImage, error) {
 
 	bytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Print(err)
+		log.Println("Wordpress.UploadFile.HasError", err)
 		return image, err
 	}
 	mime := http.DetectContentType(bytes)
@@ -266,7 +269,7 @@ func (w *Wordpress) UploadFile(url string, postId int) (WpImage, error) {
 		w.cnf, params,
 	), &response)
 	if err != nil {
-		log.Println(err)
+		log.Println("Wordpress.UploadFile.2.HasError", err)
 		w.err = err
 		image.Id = response["id"].(int)
 		image.Url = response["link"].(string)

@@ -23,7 +23,7 @@ func (rt *Routes) GetFreeTask(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewEncoder(w).Encode(question)
 	if err != nil {
-		log.Println(err)
+		log.Println("RoutesGet.GetFreeTask.HasError", err)
 	}
 }
 
@@ -46,7 +46,7 @@ func (rt *Routes) GetCats(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewEncoder(w).Encode(cats)
 	if err != nil {
-		log.Println(err)
+		log.Println("RoutesGet.GetCats.HasError", err)
 	}
 }
 
@@ -76,7 +76,7 @@ func (rt *Routes) GetTasksForStat(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewEncoder(w).Encode(stat)
 	if err != nil {
-		log.Println(err)
+		log.Println("RoutesGet.GetTasksForStat.HasError", err)
 	}
 }
 
@@ -87,6 +87,6 @@ func (rt *Routes) GetTasks(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewEncoder(w).Encode(tasks)
 	if err != nil {
-		log.Println(err)
+		log.Println("RoutesGet.GetTasks.HasError", err)
 	}
 }

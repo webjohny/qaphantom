@@ -24,12 +24,12 @@ func (m *MysqlDb) GetFreeTask(id int) MysqlFreeTask {
 	var sites []MysqlSite
 
 	sqlCount := "SELECT COUNT(*) FROM `tasks` WHERE `site_id` = s.id"
-	sqlSelectSite := "s.id, s.qsts_limit, s.more_tags, s.symb_micro_marking, s.language, s.theme, s.from, s.to, s.qa_count_from, s.qa_count_to, s.login, s.password, s.domain, s.h1, s.sh_format, s.sh_order, s.video_step, s.linking, s.parse_dates, s.parse_doubles, s.parse_fast, s.parse_search4, s.image_source, s.image_key, s.pub_image, (" + sqlCount + ") as count_rows"
+	sqlSelectSite := "s.id, s.extra, s.qsts_limit, s.more_tags, s.symb_micro_marking, s.language, s.theme, s.from, s.to, s.qa_count_from, s.qa_count_to, s.login, s.password, s.domain, s.h1, s.sh_format, s.sh_order, s.video_step, s.linking, s.parse_dates, s.parse_doubles, s.parse_fast, s.parse_search4, s.image_source, s.image_key, s.pub_image, (" + sqlCount + ") as count_rows"
 	sqlSite := "SELECT " + sqlSelectSite + " FROM sites s"
 
 	err := m.db.Select(&sites, sqlSite)
 	if err != nil{
-		log.Println("MysqlDb.GetFreeTask", err)
+		log.Println("MysqlDb.GetFreeTask.HasError", err)
 	}
 	sites = ShuffleSites(sites)
 
@@ -78,12 +78,24 @@ func (m *MysqlDb) GetFreeTask(id int) MysqlFreeTask {
 		var task MysqlTask
 		err := m.db.Get(&task, sqlQuery)
 		if err != nil{
-			log.Println("MysqlDb.GetFreeTask.2", err)
+			log.Println("MysqlDb.GetFreeTask.2.HasError", err)
 		}
 		freeTask.MergeTask(task)
 		freeTask.SavingAvailable = freeTask.QstsLimit > freeTask.CountRows
 	}
 	return freeTask
+}
+
+func (m *MysqlDb) GetTaskByKeyword(k string) MysqlTask {
+	var result MysqlTask
+	sqlQuery := "SELECT * FROM `tasks` WHERE `keyword` = ? LIMIT 1"
+
+	err := m.db.Get(&result, sqlQuery, k)
+	if err != nil {
+		//log.Println("MysqlDb.GetTaskByKeyword.HasError", err)
+	}
+
+	return result
 }
 
 func (m *MysqlDb) GetCountTasks(params map[string]interface{}) int {
@@ -92,7 +104,7 @@ func (m *MysqlDb) GetCountTasks(params map[string]interface{}) int {
 	for rows.Next() {
 		err := rows.Scan(&count)
 		if err != nil {
-			log.Println("MysqlDb.GetCountTasks", err)
+			log.Println("MysqlDb.GetCountTasks.HasError", err)
 		}
 	}
 	return count
@@ -123,7 +135,7 @@ func (m *MysqlDb) GetTasks(params map[string]interface{}) []MysqlTask {
 
 	err := m.db.Select(&results, sqlQuery)
 	if err != nil {
-		log.Println("MysqlDb.GetTasks", err)
+		log.Println("MysqlDb.GetTasks.HasError", err)
 	}
 
 	return results
@@ -324,7 +336,7 @@ func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 			for k, v := range stat {
 				info, err := json.Marshal(v)
 				if err != nil {
-					log.Println("MysqlDb.CollectStats", err)
+					log.Println("MysqlDb.CollectStats.HasError", err)
 				}
 				item := map[string]interface{}{
 					"info": info,
@@ -332,7 +344,7 @@ func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 				res, err := m.UpdateSite(item, int(k))
 				fmt.Println(res)
 				if err != nil {
-					log.Println("MysqlDb.CollectStats.2", err)
+					log.Println("MysqlDb.CollectStats.2.HasError", err)
 				}
 			}
 		}

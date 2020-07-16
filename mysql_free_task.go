@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+type FreeTaskExtra struct {
+	DeepPaa bool
+	RedirectMethod bool
+}
+
 func (t *MysqlFreeTask) MergeTask(task MysqlTask) {
 	t.Id = int(task.Id.Int64)
 	t.Keyword = task.Keyword.String
@@ -46,6 +51,16 @@ func (t *MysqlFreeTask) MergeSite(site MysqlSite){
 	t.CountRows = int(site.CountRows.Int64)
 	t.MoreTags = site.MoreTags.String
 	t.SymbMicroMarking = site.SymbMicroMarking.String
+	t.Extra = FreeTaskExtra{}
+
+	var extra map[string]interface{}
+	_ = json.Unmarshal([]byte(site.Extra.String), &extra)
+	if extra["deep_paa"] != "" {
+		t.Extra.DeepPaa = extra["deep_paa"].(bool)
+	}
+	if extra["redirect_method"] != "" {
+		t.Extra.RedirectMethod = extra["redirect_method"].(bool)
+	}
 }
 
 func (t *MysqlFreeTask) SetFinished(status int, errorMsg string) {
@@ -68,7 +83,7 @@ func (t *MysqlFreeTask) SetFinished(status int, errorMsg string) {
 
 	_, err := mysql.UpdateTask(data, t.Id)
 	if err != nil {
-		log.Println("MysqlFreeTask.SetFinished", err)
+		log.Println("MysqlFreeTask.SetFinished.HasError", err)
 	}
 }
 
@@ -91,7 +106,7 @@ func (t *MysqlFreeTask) FreeTask() {
 
 	_, err := mysql.UpdateTask(data, t.Id)
 	if err != nil {
-		log.Println("MysqlFreeTask.FreeTask", err)
+		log.Println("MysqlFreeTask.FreeTask.HasError", err)
 	}
 }
 
@@ -112,7 +127,7 @@ func (t *MysqlFreeTask) SetTimeout(parser int) {
 
 	_, err := mysql.UpdateTask(data, t.Id)
 	if err != nil {
-		log.Println("MysqlFreeTask.SetTimeout", err)
+		log.Println("MysqlFreeTask.SetTimeout.HasError", err)
 	}
 }
 
@@ -135,7 +150,7 @@ func (t *MysqlFreeTask) SetError(error string) {
 
 	_, err := mysql.UpdateTask(data, t.Id)
 	if err != nil {
-		log.Println("MysqlFreeTask.SetError", err)
+		log.Println("MysqlFreeTask.SetError.HasError", err)
 	}
 }
 
@@ -157,8 +172,22 @@ func (t *MysqlFreeTask) SaveLog() {
 
 	_, err := mysql.UpdateTask(data, t.Id)
 	if err != nil {
-		log.Println("MysqlFreeTask.SaveLog", err)
+		log.Println("MysqlFreeTask.SaveLog.HasError", err)
 	}
+}
+
+func (t *MysqlFreeTask) GetRandDomain() string {
+	domains := t.Domain
+	if domains != "" && domains != "[]" {
+		var arr []string
+		err := json.Unmarshal([]byte(domains), &arr)
+		if err != nil {
+			log.Println("MysqlFreeTask.GetRandDomain.HasError", err)
+		}else {
+			return utils.ArrayRand(arr)
+		}
+	}
+	return ""
 }
 
 func (t *MysqlFreeTask) GetRandSymb() string {
@@ -167,7 +196,7 @@ func (t *MysqlFreeTask) GetRandSymb() string {
 		var arr []string
 		err := json.Unmarshal([]byte(symbs), &arr)
 		if err != nil {
-			log.Println("MysqlFreeTask.GetRandSymb", err)
+			log.Println("MysqlFreeTask.GetRandSymb.HasError", err)
 		}else {
 			return utils.ArrayRand(arr)
 		}
@@ -181,7 +210,7 @@ func (t *MysqlFreeTask) GetRandTag() string {
 		var arr []string
 		err := json.Unmarshal([]byte(moreTags), &arr)
 		if err != nil {
-			log.Println("MysqlFreeTask.GetRandTag", err)
+			log.Println("MysqlFreeTask.GetRandTag.HasError", err)
 		}else {
 			return utils.ArrayRand(arr)
 		}

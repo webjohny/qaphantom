@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 )
 
@@ -28,7 +27,7 @@ func (conf *Configuration) Create() {
 	configFile, err := os.Open(filename)
 	defer configFile.Close()
 	if err != nil {
-		fmt.Println(err.Error())
+		panic(err)
 	}
 	jsonParser := json.NewDecoder(configFile)
 	jsonParser.Decode(&conf)

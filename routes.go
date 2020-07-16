@@ -29,13 +29,13 @@ func (rt *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 
 	stream := Stream{}
 	stream.cmd = commandExec
-	status := stream.StartTaskTimer(500, limit)
+	stream.StartTaskTimer(500, limit)
 
 	err := json.NewEncoder(w).Encode(map[string]bool{
-		"status": status,
+		"status": true,
 	})
 	if err != nil {
-		log.Println(err)
+		log.Println("Routes.CmdTimer.HasError", err)
 	}
 }
 

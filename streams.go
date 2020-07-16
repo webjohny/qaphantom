@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/rand"
 	"os/exec"
 	"time"
@@ -13,14 +12,13 @@ type Stream struct {
 	state bool
 	job JobHandler
 	Proxy Proxy
-	Browser Browser
+	browser Browser
 	cmd string
 	ctxTimer context.Context
 	CancelTimer context.CancelFunc
 }
 
-func (s *Stream) StartTaskTimer(streamId int, limit int64) bool {
-	var status = true
+func (s *Stream) StartTaskTimer(streamId int, limit int64) {
 	cmd := s.cmd
 
 	if limit < 1 {
@@ -30,37 +28,28 @@ func (s *Stream) StartTaskTimer(streamId int, limit int64) bool {
 	s.ctxTimer, s.CancelTimer = context.WithTimeout(context.Background(), time.Second * time.Duration(limit))
 	defer s.CancelTimer()
 
-	var err error
-
 	if cmd != "" {
 		//php -f /var/www/html/cron.php parser cron sleeping 5
-		_, err = exec.CommandContext(s.ctxTimer, "bash", "-c", cmd).Output()
-	} else if s.Browser.isOpened {
-		fmt.Println("Start job")
-		s.Browser.limit = limit
-		s.job.Browser = s.Browser
+		go exec.CommandContext(s.ctxTimer, "bash", "-c", cmd).Output()
+	} else if s.browser.isOpened {
+		fmt.Println("Start job", limit)
+		s.browser.limit = limit
+		s.job.Browser = s.browser
 		s.job.isFinished = make(chan bool)
 		s.job.IsStart = true
 		go s.job.Run(streamId)
-
-		select {
-			case <-s.ctxTimer.Done():
-				fmt.Println("Timeout job")
-				s.CancelTimer()
-				s.job.Cancel()
-
-			case <-s.job.isFinished:
-				fmt.Println("End job")
-				s.CancelTimer()
-		}
 	}
 
-	if err != nil {
-		status = false
-		log.Println(err)
-	}
+	select {
+	case <-s.ctxTimer.Done():
+		fmt.Println("Timeout job")
+		s.CancelTimer()
+		s.job.Cancel()
 
-	return status
+	case <-s.job.isFinished:
+		fmt.Println("End job")
+		s.CancelTimer()
+	}
 }
 
 func (s *Stream) Start(streamId int, limit int64) {
@@ -69,16 +58,16 @@ func (s *Stream) Start(streamId int, limit int64) {
 	time.Sleep(time.Millisecond * time.Duration(streamId * 500))
 
 	if s.cmd == "" {
-		s.Browser.Init()
+		s.browser.Init()
 	}
 
 	for {
 		if !s.state {
-			s.Browser.Cancel()
+			s.browser.Cancel()
 			break
 		}
 
-		secs := time.Second * time.Duration(int64(rand.Intn(50)))
+		secs := time.Second * time.Duration(int64(rand.Intn(15)))
 
 		fmt.Println("Start stream #", streamId, s.cmd)
 		s.StartTaskTimer(streamId, limit)
@@ -93,13 +82,9 @@ func (s *Stream) Stop() {
 	if s.CancelTimer != nil {
 		s.CancelTimer()
 	}
-	if s.Browser.isOpened {
-		s.Browser.Cancel()
-	}
-	if s.job.IsStart {
-		s.job.IsStart = false
-		go s.job.Cancel()
-	}
+	s.browser.Cancel()
+	s.job.IsStart = false
+	go s.job.Cancel()
 }
 
 

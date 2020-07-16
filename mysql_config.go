@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"strings"
 )
 
@@ -11,7 +11,7 @@ func (m *MysqlDb) GetConfig() MysqlConfig {
 
 	err := m.db.Get(&result, sqlQuery)
 	if err != nil {
-		fmt.Println(err)
+		log.Println("MysqlConfig.GetConfig.HasError", err)
 	}
 
 	return result

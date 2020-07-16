@@ -38,7 +38,7 @@ func (m *MysqlDb) GetSites(params map[string]interface{}, postData map[string]in
 
 	err := m.db.Select(&results, sqlQuery)
 	if err != nil {
-		log.Println(err)
+		log.Println("MysqlSites.GetSites.HasError", err)
 	}
 
 	return results

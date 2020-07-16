@@ -18,7 +18,7 @@ func (m *MysqlDb) GetFreeProxy() MysqlProxy {
 
 	err := m.db.Get(&proxy, sqlQuery)
 	if err != nil {
-		log.Println(err)
+		log.Println("MysqlProxies.GetFreeProxy.HasError", err)
 	}
 
 	return proxy
@@ -32,7 +32,7 @@ func (m *MysqlDb) GetProxies() []MysqlProxy {
 
 	err := m.db.Select(&proxies, sqlQuery)
 	if err != nil {
-		log.Println(err)
+		log.Println("MysqlProxies.GetProxies.HasError", err)
 	}
 
 	return proxies

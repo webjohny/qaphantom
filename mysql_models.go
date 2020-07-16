@@ -33,6 +33,7 @@ type MysqlSite struct {
 	ImageSource sql.NullInt64 `db:"image_source" json:"image_source"`
 	Info sql.NullString `db:"info" json:"info"`
 	MoreTags sql.NullString `db:"more_tags" json:"more_tags"`
+	Extra sql.NullString `db:"extra" json:"extra"`
 	SymbMicroMarking sql.NullString `db:"symb_micro_marking" json:"symb_micro_marking"`
 	CountRows sql.NullInt64 `db:"count_rows" json:"count_rows"`
 }
@@ -129,6 +130,7 @@ type MysqlFreeTask struct {
 	SymbMicroMarking string `db:"symb_micro_marking" json:"symb_micro_marking"`
 	CountRows int `db:"count_rows" json:"count_rows"`
 	SavingAvailable bool `json:"saving_available"`
+	Extra FreeTaskExtra `json:"extra"`
 }
 
 type MysqlProxy struct {

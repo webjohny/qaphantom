@@ -28,7 +28,7 @@ func (u *Utils) MysqlRealEscapeString(value string) string {
 func (u *Utils) ArrayRand(arr []string) string {
 	rand.Seed(time.Now().Unix())
 	n := rand.Int() % len(arr)
-	return arr[n]
+	return strings.Trim(arr[n], " ")
 }
 
 func (u *Utils) SetInterval(someFunc func(), milliseconds int, async bool) chan bool {
@@ -139,7 +139,7 @@ func (u *Utils) StripTags(html string) string {
 	paaReader := strings.NewReader(html)
 	doc, err := goquery.NewDocumentFromReader(paaReader)
 	if err != nil {
-		log.Println(err)
+		log.Println("Utils.StripTags.HasError", err)
 	}
 
 	return doc.Text()
@@ -152,7 +152,7 @@ func (u *Utils) RandBool() bool {
 func (u *Utils) ParseFormCollection(r *http.Request, typeName string) map[string]string {
 	result := make(map[string]string)
 	if err := r.ParseForm(); err != nil {
-		log.Println(err)
+		log.Println("Utils.ParseFormCollection.HasError", err)
 	}
 	for key, values := range r.Form {
 		re := regexp.MustCompile(typeName + "\\[(.+)\\]")

@@ -31,10 +31,13 @@ func (m *MysqlDb) AddResult(item map[string]interface{}) (sql.Result, error) {
 
 	sqlQuery := "INSERT INTO `results` SET "
 	sqlQuery += "`task_id` = :task_id, " +
-		"`q` = :q, " +
-		"`a` = :a, " +
-		"`link` = :link, " +
 		"`link_title` = :link_title, " +
+		"`site_id` = :site_id, " +
+		"`cat_id` = :cat_id, " +
+		"`domain` = :domain, " +
+		"`cat` = :cat, " +
+		"`q` = :q, " +
+		"`link` = :link, " +
 		"`create_date` = :create_date, " +
 		"`qa_date` = :qa_date"
 

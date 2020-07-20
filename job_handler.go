@@ -168,12 +168,12 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	}
 	taskId = task.Id
 	task.Domain = task.GetRandDomain()
+	//task.SetLog("Задача #" + strconv.Itoa(taskId) + " с запросом (" + task.Keyword + ") взята в работу")
 
 	j.task = task
 
 	if j.CheckFinished() {
 		task.SetLog("Задача завершилась преждевременно из-за таймаута")
-		task.SaveLog()
 		return false, "Timeout"
 	}
 
@@ -206,7 +206,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		if j.CheckFinished() {
 			task.SetLog("Задача завершилась преждевременно из-за таймаута")
-			task.SaveLog()
 			return false, "Timeout"
 		}
 
@@ -225,7 +224,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		); err != nil {
 			log.Println("JobHandler.Run.HasError", err)
 			task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
-			task.SaveLog()
 			continue
 		}else{
 			if j.CheckCaptcha(searchHtml) {
@@ -253,7 +251,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 					); err != nil {
 						log.Println("JobHandler.Run.2.HasError", err)
 						task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
-						task.SaveLog()
 						continue
 					}
 					if searchHtml != "" {
@@ -285,7 +282,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	if j.CheckFinished() {
 		task.SetLog("Задача завершилась преждевременно из-за таймаута")
-		task.SaveLog()
 		return false, "Timeout"
 	}
 
@@ -316,7 +312,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	if j.CheckFinished() {
 		task.SetLog("Задача завершилась преждевременно из-за таймаута")
-		task.SaveLog()
 		return false, "Timeout"
 	}
 
@@ -331,7 +326,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	if j.CheckFinished() {
 		if j.IsStart {
 			j.task.SetLog("Задача завершилась преждевременно из-за таймаута")
-			j.task.SaveLog()
 		}
 		return false, "Timeout"
 	}
@@ -367,7 +361,11 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	for _, setting := range settings {
 		if _, err := mysql.AddResult(map[string]interface{}{
-			"a" : setting.Text,
+			//"a" : setting.Text,
+			"cat_id" : task.CatId,
+			"site_id" : task.SiteId,
+			"cat" : task.Cat,
+			"domain" : task.Domain,
 			"q" : setting.Question,
 			"task_id" : strconv.Itoa(task.Id),
 			"link" : setting.Link,
@@ -514,11 +512,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		if j.CheckFinished() {
 			task.SetLog("Задача завершилась преждевременно из-за таймаута")
-			task.SaveLog()
 			return false, "Timeout"
 		}
-
-		task.SaveLog()
 
 		// Парсим видео
 		var videosHtml string
@@ -536,7 +531,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		if j.CheckFinished() {
 			task.SetLog("Задача завершилась преждевременно из-за таймаута")
-			task.SaveLog()
 			return false, "Timeout"
 		}
 
@@ -736,7 +730,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		if j.CheckFinished() {
 			task.SetLog("Задача завершилась преждевременно из-за таймаута")
-			task.SaveLog()
 			return false, "Timeout"
 		}
 
@@ -792,7 +785,6 @@ func (j *JobHandler) RedirectParsing(stats *QaStats) map[string]QaSetting {
 	if j.CheckFinished() {
 		j.IsStart = false
 		j.task.SetLog("Задача завершилась преждевременно из-за таймаута")
-		j.task.SaveLog()
 		return settings
 	}
 
@@ -882,7 +874,6 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 	if j.CheckFinished() {
 		j.IsStart = false
 		j.task.SetLog("Задача завершилась преждевременно из-за таймаута")
-		j.task.SaveLog()
 		return settings
 	}
 
@@ -928,7 +919,7 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 				qa.Text = text
 				qa.Html = txtTtml
 				qa.Link = link
-				qa.LinkTitle = s.Find(".g a").Text()
+				qa.LinkTitle = s.Find(".g .LC20lb").Text()
 				qa.Date = date
 				qa.Length = utf8.RuneCountInString(text) + utf8.RuneCountInString(question)
 				qa.Ved = ved

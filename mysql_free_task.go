@@ -55,11 +55,11 @@ func (t *MysqlFreeTask) MergeSite(site MysqlSite){
 
 	var extra map[string]interface{}
 	_ = json.Unmarshal([]byte(site.Extra.String), &extra)
-	if extra["deep_paa"] != "" {
-		t.Extra.DeepPaa = extra["deep_paa"].(bool)
+	if v, ok := extra["deep_paa"] ; ok {
+		t.Extra.DeepPaa = v.(bool)
 	}
-	if extra["redirect_method"] != "" {
-		t.Extra.RedirectMethod = extra["redirect_method"].(bool)
+	if v, ok := extra["redirect_method"] ; ok {
+		t.Extra.RedirectMethod = v.(bool)
 	}
 }
 
@@ -160,9 +160,10 @@ func (t *MysqlFreeTask) SetLog(text string) {
 	}
 
 	timePoint := time.Now()
-	text = timePoint.Format("2006-01-02 15:04:05") + " " + text
+	text = timePoint.Format("2006-01-02 15:04:05") + " #" + strconv.Itoa(t.Id) + ": " + text
 	fmt.Println(text)
 	t.Log = append(t.Log, text)
+	t.SaveLog()
 }
 
 func (t *MysqlFreeTask) SaveLog() {

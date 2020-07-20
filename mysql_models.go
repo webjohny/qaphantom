@@ -63,6 +63,10 @@ type MysqlUagent struct {
 type MysqlResult struct {
 	Id sql.NullInt64 `db:"id" json:"id"`
 	TaskId sql.NullInt64 `db:"task_id" json:"task_id"`
+	Domain sql.NullString `db:"domain" json:"domain"`
+	Cat sql.NullString `db:"cat" json:"cat"`
+	CatId sql.NullInt64 `db:"cat_id" json:"cat_id"`
+	SiteId sql.NullInt64 `db:"site_id" json:"site_id"`
 	Q sql.NullString `db:"q" json:"q"`
 	A sql.NullString `db:"a" json:"a"`
 	Link sql.NullString `db:"link" json:"link"`

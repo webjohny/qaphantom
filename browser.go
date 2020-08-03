@@ -11,6 +11,7 @@ import (
 	"github.com/chromedp/cdproto/security"
 	"github.com/webjohny/chromedp"
 	"log"
+	"time"
 )
 
 type Browser struct {
@@ -86,6 +87,7 @@ func (b *Browser) Init() bool {
 			b.ctx = ctx
 			return nil
 		}),
+		chromedp.Sleep(time.Second),
 		network.Enable(),
 		performance.Enable(),
 		page.SetLifecycleEventsEnabled(true),
@@ -95,6 +97,7 @@ func (b *Browser) Init() bool {
 		chromedp.Authentication(b.Proxy.Login, b.Proxy.Password),
 	); err != nil {
 		log.Println("Browser.Init.HasError", err)
+		return false
 	}
 
 	//taskCtx2, cancel := chromedp.NewContext(taskCtx)
@@ -124,10 +127,9 @@ func (b *Browser) Cancel() {
 	b.isOpened = false
 }
 
-func (b *Browser) Reload() {
+func (b *Browser) Reload() bool {
 	b.Cancel()
-	b.Init()
-	b.isOpened = true
+	return b.Init()
 }
 
 func (b *Browser) ChangeTab() {

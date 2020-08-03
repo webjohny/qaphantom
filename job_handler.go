@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
+	"github.com/btcsuite/btcutil/base58"
+	"gopkg.in/masci/flickr.v2"
 	"log"
 	"math"
 	"math/rand"
@@ -52,6 +55,16 @@ type QaSetting struct {
 	Clicked bool
 }
 
+type QaFast struct {
+	H int
+	A string
+	Link string
+	LinkTitle string
+	Fast bool
+	Date string
+	Length int
+}
+
 // Счётчик типов вопросов
 type QaStats struct {
 	All int // всего вопросов найдено
@@ -75,63 +88,21 @@ type QaTotalPage struct {
 }
 
 type QaImageResult struct {
-	Id int
+	Id string
 	Url string
 	UrlMedium string
 	Author string
 	ShortLink string
+	Encoded bool
 }
 
-
-func (j *JobHandler) AntiCaptcha(url string, html string) (string, error) {
-	paaReader := strings.NewReader(html)
-	doc, err := goquery.NewDocumentFromReader(paaReader)
-	if err != nil {
-		log.Println("JobHandler.AntiCaptcha.HasError", err)
-		return "", err
-	}
-
-	siteKey, _ := doc.Find("#recaptcha").Attr("data-sitekey")
-	sToken, _ := doc.Find("#recaptcha").Attr("data-s")
-
-	c := &Captcha{
-		j.config.Antigate.String,
-		url,
-		siteKey,
-		sToken,
-		"http",
-		j.Browser.Proxy.Host,
-		j.Browser.Proxy.Port,
-		j.Browser.Proxy.Login,
-		j.Browser.Proxy.Password,
-		j.Browser.Proxy.Agent,
-		time.Minute * 2,
-	}
-
-	key, err := c.SendRecaptcha()
-	if err != nil {
-		log.Println("JobHandler.AntiCaptcha.2.HasError", err)
-	}
-	return key, err
-}
-
-func (j *JobHandler) SetTimeout(secs int) {
-	ctx, cancel := context.WithTimeout(j.Browser.ctx, time.Duration(secs) * time.Second)
-	j.CancelTimeout = cancel
-	j.ctx = ctx
-}
-
-func (j *JobHandler) Cancel() {
-	j.CancelTimeout()
-	if !LocalTest {
-		j.isFinished <- true
-	}
-}
-
-func (j *JobHandler) Reload() {
-	j.CancelTimeout()
-	j.Browser.Reload()
-	j.SetTimeout(150)
+type XmlPhotos struct {
+	XMLName xml.Name `xml:"photos"`
+	Photos []struct {
+		Id  int `xml:"id,attr"`
+		OwnerName  string `xml:"ownername,attr"`
+		Url string `xml:"url_z,attr"`
+	} `xml:"photo"`
 }
 
 func (j *JobHandler) Run(parser int) (status bool, msg string) {
@@ -147,10 +118,9 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	//	return false, "Browser failed"
 	//}
 
-
 	var taskId int
 
-	var fast QaSetting
+	//var fast QaFast
 
 	// Берём свободную задачу в работу
 	var task MysqlFreeTask
@@ -213,120 +183,143 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		googleUrl = "https://www.google.com/search?hl=en&q=" + url.QueryEscape(task.Keyword)
 		task.SetLog("Открываем страницу (попытка №" + strconv.Itoa(i) + "): " + googleUrl)
 
-		if err := chromedp.Run(j.ctx,
-			// Устанавливаем страницу для парсинга
-			//chromedp.Sleep(time.Second * 60),
-			chromedp.Navigate(googleUrl),
-			chromedp.Sleep(time.Second * time.Duration(rand.Intn(10))),
-			chromedp.WaitVisible("body", chromedp.ByQuery),
-			// Вытащить html на проверку каптчи
-			chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
-		); err != nil {
-			log.Println("JobHandler.Run.HasError", err)
-			task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
-			continue
-		}else{
-			if j.CheckCaptcha(searchHtml) {
-				task.SetLog("Есть каптча для " + j.Browser.Proxy.LocalIp + "...")
-				//j.proxy.SetTimeout(parser, 500)
-				//j.proxy.LocalIp = ""
-				//j.Cancel()
-				//continue
-				//key, _ := j.AntiCaptcha(googleUrl, searchHtml)
-				key := ""
-				if key != "" {
-					task.SetLog("Anticaptcha: " + key)
-					if err := chromedp.Run(j.ctx,
-						chromedp.WaitVisible("captcha-form", chromedp.ByID),
-						chromedp.WaitVisible("g-recaptcha-response", chromedp.ByID),
-						chromedp.ActionFunc(func(ctx context.Context) error {
-							fmt.Println("Yes")
-							return nil
-						}),
-						chromedp.SetValue(`g-recaptcha-response`, key, chromedp.ByID),
-						chromedp.Submit(`captcha-form`, chromedp.ByID),
-						chromedp.Sleep(time.Second * 5),
-						chromedp.WaitVisible("body", chromedp.ByQuery),
-						chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
-					); err != nil {
-						log.Println("JobHandler.Run.2.HasError", err)
-						task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
-						continue
-					}
-					if searchHtml != "" {
-						f, err := os.Create("/var/www/example.txt")
-						if err != nil {
-							fmt.Println(err)
+		if j.ctx != nil {
+			if err := chromedp.Run(j.ctx,
+				// Устанавливаем страницу для парсинга
+				//chromedp.Sleep(time.Second * 60),
+				chromedp.Navigate(googleUrl),
+				chromedp.Sleep(time.Second*time.Duration(rand.Intn(10))),
+				chromedp.WaitVisible("body", chromedp.ByQuery),
+				// Вытащить html на проверку каптчи
+				chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
+			); err != nil {
+				log.Println("JobHandler.Run.HasError", err)
+				task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
+				continue
+			} else {
+				if j.CheckCaptcha(searchHtml) {
+					task.SetLog("Есть каптча для " + j.Browser.Proxy.LocalIp + "...")
+					//j.proxy.SetTimeout(parser, 500)
+					//j.proxy.LocalIp = ""
+					//j.Cancel()
+					//continue
+					//key, _ := j.AntiCaptcha(googleUrl, searchHtml)
+					key := ""
+					if key != "" {
+						task.SetLog("Anticaptcha: " + key)
+						if err := chromedp.Run(j.ctx,
+							chromedp.WaitVisible("captcha-form", chromedp.ByID),
+							chromedp.WaitVisible("g-recaptcha-response", chromedp.ByID),
+							chromedp.ActionFunc(func(ctx context.Context) error {
+								fmt.Println("Yes")
+								return nil
+							}),
+							chromedp.SetValue(`g-recaptcha-response`, key, chromedp.ByID),
+							chromedp.Submit(`captcha-form`, chromedp.ByID),
+							chromedp.Sleep(time.Second*5),
+							chromedp.WaitVisible("body", chromedp.ByQuery),
+							chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
+						); err != nil {
+							log.Println("JobHandler.Run.2.HasError", err)
+							task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
+							continue
 						}
-						d2 := []byte(searchHtml)
-						n2, err := f.Write(d2)
-						if err != nil {
-							fmt.Println("JobHandler.Run.3", n2, err)
-							_ = f.Close()
+						if searchHtml != "" {
+							f, err := os.Create("/var/www/example.txt")
+							if err != nil {
+								fmt.Println(err)
+							}
+							d2 := []byte(searchHtml)
+							n2, err := f.Write(d2)
+							if err != nil {
+								fmt.Println("JobHandler.Run.3", n2, err)
+								_ = f.Close()
+							}
 						}
+					} else {
+						task.SetLog("Антикаптча не сработала для " + j.Browser.Proxy.LocalIp + "...")
+						return false, "Каптча"
 					}
-				}else{
-					task.SetError("Антикаптча не сработала для " + j.Browser.Proxy.LocalIp + "...")
-					continue
 				}
-			}
 
-			if !j.CheckPaa(searchHtml) {
-				task.SetError("Отсутствует PAA.")
-				go j.Cancel()
-				return false, "Отсутствует PAA."
+				if !j.CheckPaa(searchHtml) {
+					task.SetError("Отсутствует PAA.")
+					go j.Cancel()
+					return false, "Отсутствует PAA."
+				}
+				break
 			}
-			break
+		}else{
+			task.SetLog("Браузер не был запущен. Задача пропускается.")
+			go j.Cancel()
+			return false, "Context undefined"
 		}
 	}
 
 	if j.CheckFinished() {
 		task.SetLog("Задача завершилась преждевременно из-за таймаута")
+		go j.Cancel()
 		return false, "Timeout"
 	}
 
 	task.SetLog("Блоки загружены")
 	task.SetLog("Начинаем обработку PAA")
 
-	// Загружаем HTML документ в GoQuery пакет который организует облегчённую работу с HTML селекторами
-	j.SetFastAnswer(searchHtml)
+	var fast QaFast
+	if task.ParseFast > 0{
+		// Загружаем HTML документ в GoQuery пакет который организует облегчённую работу с HTML селекторами
+		fast = j.SetFastAnswer(searchHtml)
+	}
+	log.Println(fast)
 
 	searchHtml = ""
 
 	duration := time.Duration(rand.Intn(8))
-	if !j.task.Extra.DeepPaa {
+	if !j.config.GetExtra().DeepPaa {
 		duration = time.Duration(1)
 	}
 
-	if err := chromedp.Run(j.ctx,
-		// Кликаем сразу на первый вопрос
-		chromedp.Click(".related-question-pair:first-child .cbphWd"),
-		// Ждём 0.3 секунды чтобы открылся вопрос
-		chromedp.Sleep(time.Second * duration),
-	); err != nil {
-		log.Println("JobHandler.Run.4.HasError", err)
-		task.SetError("Отсутствует PAA. (" + err.Error() + ")")
+	if j.ctx != nil {
+		if err := chromedp.Run(j.ctx,
+			// Кликаем сразу на первый вопрос
+			chromedp.Click(".related-question-pair:first-child .cbphWd"),
+			// Ждём 0.3 секунды чтобы открылся вопрос
+			chromedp.Sleep(time.Second*duration),
+		); err != nil {
+			log.Println("JobHandler.Run.4.HasError", err)
+			task.SetError("Отсутствует PAA. (" + err.Error() + ")")
+			go j.Cancel()
+			return false, "Отсутствует PAA."
+		}
+	}else{
+		task.SetLog("Браузер не был запущен. Задача пропускается.")
 		go j.Cancel()
-		return false, "Отсутствует PAA."
+		return false, "Context undefined"
 	}
 
 	if j.CheckFinished() {
 		task.SetLog("Задача завершилась преждевременно из-за таймаута")
+		go j.Cancel()
 		return false, "Timeout"
 	}
 
-	// Запускаем функцию перебора вопросов
 	var settings map[string]QaSetting
-	if task.Extra.RedirectMethod {
-		settings = j.RedirectParsing(&stats)
+	if j.ctx != nil {
+		// Запускаем функцию перебора вопросов
+		if j.config.GetExtra().RedirectMethod {
+			settings = j.RedirectParsing(&stats)
+		}else{
+			settings = j.ClickParsing(&stats)
+		}
 	}else{
-		settings = j.ClickParsing(&stats)
+		task.SetLog("Браузер не был запущен. Задача пропускается.")
+		go j.Cancel()
+		return false, "Context undefined"
 	}
 
 	if j.CheckFinished() {
-		if j.IsStart {
-			j.task.SetLog("Задача завершилась преждевременно из-за таймаута")
-		}
+		j.task.SetLog("Задача завершилась преждевременно из-за таймаута")
+		go j.Cancel()
 		return false, "Timeout"
 	}
 
@@ -421,8 +414,9 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		wp := Wordpress{}
 		wp.Connect(`https://` + task.Domain + `/xmlrpc2.php`, task.Login, task.Password, 1)
 		if !wp.CheckConn() {
-			task.SetError("Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")")
+			task.SetLog("Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")")
 			task.SetError(wp.err.Error())
+			go j.Cancel()
 			return false, "Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")"
 		}
 
@@ -432,9 +426,9 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		var qaQs []QaSetting
 		// Если есть быстрый ответ, ставим его первым
-		if task.ParseFast > 0 && fast.Question != "" && task.H1 < 1 {
-			qaQs = append(qaQs, fast)
-		}
+		//if task.ParseFast > 0 && setting.Question != "" && task.H1 < 1 {
+		//	qaQs = append(qaQs, setting)
+		//}
 		for _, setting := range settings {
 			qaQs = append(qaQs, setting)
 		}
@@ -487,6 +481,103 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		// Вычисляем кол-во блоков
 		qaCount := len(qaQs)
+
+		// Заголовок
+		variants := j.config.GetVariants()
+
+		var h1 string
+		if task.H1 < 1 || len(qaQs) < 1 {
+			h1 = task.Keyword
+		}else if len(qaQs) > 0 && qaQs[0].Question != ""{
+			h1 = qaQs[0].Question
+		}
+		tmp := strings.Split(h1, " ")
+		if len(tmp) > 0 {
+			for k, v := range tmp {
+				tmp[k] = strings.Title(v)
+			}
+		}
+		rand.Seed(time.Now().Unix()) // initialize global pseudo random generator
+		var variant string
+		if len(variants) > 0 {
+			variant = variants[rand.Intn(len(variants))]
+		}
+
+		qaTotalPage.Title = variant + strings.Join(tmp, " ")
+
+		var photo QaImageResult
+		var mainImg string
+
+		if task.PubImage < 1 {
+			task.SetLog("Парсинг фото отключён настройками")
+		}else{
+			// Парсинг только по ключу
+			if task.ImageKey == 2 {
+				task.SetLog("Парсинг фото только по ключу")
+				if task.Keyword != "" {
+					if task.ImageSource == 0 {
+						photo = j.ParsePhotos(task.Theme, "flickr", false)
+					} else if task.ImageSource == 1 {
+						photo = j.ParsePhotos(task.Keyword, "google", false)
+					}
+				}
+			} else if task.ImageKey == 1 { // Парсинг только по теме
+				task.SetLog("Парсинг фото только по теме")
+				if task.Theme != "" {
+					if task.ImageSource == 0 {
+						photo = j.ParsePhotos(task.Theme, "flickr", true)
+					} else if task.ImageSource == 1 {
+						photo = j.ParsePhotos(task.Theme, "google", true)
+					}
+				}
+			} else { // Парсинг сначала по ключу, потом по теме
+				task.SetLog("Парсинг фото сначала по ключу, потом по теме")
+				if task.ImageSource == 0 {
+					photo = j.ParsePhotos(task.Keyword, "flickr", false)
+				}else if task.ImageSource == 1 {
+					photo = j.ParsePhotos(task.Keyword, "google", false)
+				}
+				if photo.Id == "" {
+					if task.ImageSource == 0 {
+						photo = j.ParsePhotos(task.Theme, "flickr", true)
+					}else if task.ImageSource == 1 {
+						photo = j.ParsePhotos(task.Theme, "google", true)
+					}
+				}
+			}
+
+			// Добавляем фото в Вордпресс
+			if photo.Url == "" {
+				task.SetLog("Фото не найдено")
+			} else {
+				task.SetLog("Новое фото")
+
+				// Загружаем фото в Вордпресс
+				res, _ := wp.UploadFile(photo.Url, 0, photo.Encoded)
+
+				log.Println(res)
+
+				if res.Url != "" {
+					task.SetLog("Фото загружено на сайт")
+
+					// Обрабатываем результат добавления фото в Вордпресс
+					qaTotalPage.PhotoId = res.Id
+					photo.Url = res.Url
+					photo.UrlMedium = res.UrlMedium
+
+					// Готовим код вставки фото в текст
+					if task.PubImage >= 2 {
+						mainImg = `<p><img class="alignright size-medium" src="` + photo.UrlMedium + `"></p>` + "\n"
+					}
+				}else if photo.Url != "" {
+					task.SetLog("Фото (" + photo.Url + ") не загрузилось на сайт")
+				}else {
+					task.SetLog("Фото не найдено для поста")
+				}
+			}
+		}
+
+
 		var vCount int
 		var vStep int
 
@@ -512,25 +603,33 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		if j.CheckFinished() {
 			task.SetLog("Задача завершилась преждевременно из-за таймаута")
+			go j.Cancel()
 			return false, "Timeout"
 		}
 
 		// Парсим видео
 		var videosHtml string
-		if err := chromedp.Run(j.ctx,
-			chromedp.Sleep(time.Second * time.Duration(rand.Intn(10))),
-			// Устанавливаем страницу для парсинга
-			chromedp.Navigate("https://www.youtube.com/results?search_query=" + task.Keyword),
-			// Вытащить html со списком
-			chromedp.Sleep(time.Second * 4),
-			chromedp.OuterHTML("body", &videosHtml, chromedp.ByQuery),
-		); err != nil {
-			log.Println("JobHandler.Run.7.HasError", err)
-			task.SetLog("Видео не спарсилось. (" + err.Error() + ")")
+		if j.ctx != nil {
+			if err := chromedp.Run(j.ctx,
+				chromedp.Sleep(time.Second*time.Duration(rand.Intn(10))),
+				// Устанавливаем страницу для парсинга
+				chromedp.Navigate("https://www.youtube.com/results?search_query="+task.Keyword),
+				// Вытащить html со списком
+				chromedp.Sleep(time.Second*4),
+				chromedp.OuterHTML("body", &videosHtml, chromedp.ByQuery),
+			); err != nil {
+				log.Println("JobHandler.Run.7.HasError", err)
+				task.SetLog("Видео не спарсилось. (" + err.Error() + ")")
+			}
+		}else{
+			task.SetLog("Браузер не был запущен. Задача пропускается.")
+			go j.Cancel()
+			return false, "Context undefined"
 		}
 
 		if j.CheckFinished() {
 			task.SetLog("Задача завершилась преждевременно из-за таймаута")
+			go j.Cancel()
 			return false, "Timeout"
 		}
 
@@ -560,73 +659,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			task.SetLog("Парсинг видео. Готово")
 		}
 
-		// Заголовок
-		variants := j.config.GetVariants()
 
-		var h1 string
-		if task.H1 < 1 || len(qaQs) < 1 {
-			h1 = task.Keyword
-		}else if len(qaQs) > 0 && qaQs[0].Question != ""{
-			h1 = qaQs[0].Question
-		}
-		tmp := strings.Split(h1, " ")
-		if len(tmp) > 0 {
-			for k, v := range tmp {
-				tmp[k] = strings.Title(v)
-			}
-		}
-		rand.Seed(time.Now().Unix()) // initialize global pseudo random generator
-		variant := variants[rand.Intn(len(variants))]
-
-		qaTotalPage.Title = variant + strings.Join(tmp, " ")
-
-		var photo QaImageResult
-		var mainImg string
-
-		if task.PubImage < 1 {
-			task.SetLog("Парсинг фото отключён настройками")
-		}else{
-			// Парсинг только по ключу
-			if task.ImageKey == 2 {
-				//$photo = empty($task->keyword)? null : (empty($task->image_source)? $this->_parse_photos($task->site_id, $task->keyword, false) : $this->_parse_photos($task->site_id, $task->keyword, false, $page));
-			} else if task.ImageKey == 1 { // Парсинг только по теме
-				//$photo = empty($task->theme)? null : (empty($task->image_source)? $this->_parse_photos($task->site_id, $task->theme, true) : $this->_parse_photos($task->site_id, $task->theme, true, $page));
-			} else { // Парсинг сначала по ключу, потом по теме
-				//$photo = empty($task->keyword)? null : (empty($task->image_source)? $this->_parse_photos($task->site_id, $task->keyword, false) : $this->_parse_photos($task->site_id, $task->keyword, false, $page));
-			}
-
-			if photo.Url == "" {
-				//$photo = empty($task->theme)? null : (empty($task->image_source)? $this->_parse_photos($task->site_id, $task->theme, true) : $this->_parse_photos($task->site_id, $task->theme, true, $page));
-			}
-
-			// Добавляем фото в Вордпресс
-			if photo.Url == "" {
-				task.SetLog("Фото не найдено")
-			} else {
-				task.SetLog(photo.Url)
-
-				// Загружаем фото в Вордпресс
-				//TOdO $tmp = $this->xmlrpc->photo($photo['url'], $task->keyword);
-				res, _ := wp.UploadFile(photo.Url, 0)
-				if res.Url != "" {
-					task.SetLog("Фото загружено на сайт")
-
-					// Обрабатываем результат добавления фото в Вордпресс
-					qaTotalPage.PhotoId = res.Id
-					photo.Url = res.Url
-					photo.UrlMedium = res.UrlMedium
-
-					// Готовим код вставки фото в текст
-					if task.PubImage >= 2 {
-						mainImg = `<p><img class="alignright size-medium" src="` + photo.UrlMedium + `"></p>` + "\n"
-					}
-				}else if photo.Url != "" {
-					task.SetLog("Фото (" + photo.Url + ") не загрузилось на сайт")
-				}else {
-					task.SetLog("Фото не найдено для поста")
-				}
-			}
-		}
 		// Пробегаемся по всем блокам
 		for k, item := range qaQs{
 			// Подзаголовок
@@ -717,6 +750,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			}
 			qaTotalPage.Content += "</p>\n"
 		}
+
+		qaTotalPage.Content = strings.ReplaceAll(qaTotalPage.Content, "<p>…</p>", "")
 
 		task.SetLog("Текст статьи подготовлен")
 
@@ -877,6 +912,12 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 		return settings
 	}
 
+	if j.ctx == nil {
+		j.IsStart = false
+		j.task.SetLog("Браузер не был запущен. Задача пропускается.")
+		return settings
+	}
+
 	// Вытягиваем html код PAA для парсинга вопросов
 	if err := chromedp.Run(j.ctx,
 		chromedp.OuterHTML(`.kno-kp .ifM9O`, &paaHtml, chromedp.ByQuery),
@@ -931,7 +972,7 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 				if _, ok := settings[ved]; !ok {
 					if isExpanded {
 						tasks = append(tasks, chromedp.Click(".cbphWd[data-ved=\""+ved+"\"]"))
-						tasks = append(tasks, chromedp.Sleep(time.Second*time.Duration(rand.Intn(10))))
+						tasks = append(tasks, chromedp.Sleep(time.Second*time.Duration(rand.Intn(5))))
 						clicked[ved] = true
 					}
 				}
@@ -947,40 +988,164 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 	})
 
 	// Проверяем есть ли уже достаточное количество вопросов или всё таки нужно продолжить кликинг по блокам
-	if stats.All < stats.Wqc && len(tasks) > 0 && j.task.Extra.DeepPaa {
+	if stats.All < stats.Wqc && len(tasks) > 0 && j.config.GetExtra().DeepPaa {
 		dest := make(chromedp.Tasks, len(tasks))
 		perm := rand.Perm(len(tasks))
 		for i, v := range perm {
 			dest[v] = tasks[i]
 		}
-		if err := chromedp.Run(j.ctx, dest); err != nil {
-			log.Println("JobHandler.ClickParsing.3.HasError", err)
-			return settings
-		}
-		for k, v := range clicked {
-			if setting, ok := settings[k]; ok {
-				setting.Clicked = v
+		if cap(dest) > 0 {
+			if err := chromedp.Run(j.ctx, dest); err != nil {
+				log.Println("JobHandler.ClickParsing.3.HasError", err)
+				return settings
 			}
+			for k, v := range clicked {
+				if setting, ok := settings[k]; ok {
+					setting.Clicked = v
+				}
+			}
+			// Продолжаем рекурсию
+			return j.ClickParsing(stats)
 		}
-		// Продолжаем рекурсию
-		return j.ClickParsing(stats)
 	}
 
 	return settings
 }
 
-func (j *JobHandler) SetFastAnswer(html string) {
+func (j *JobHandler) SetFastAnswer(html string) QaFast {
+	var fast QaFast
+
 	htmlReader := strings.NewReader(html)
 	doc, err := goquery.NewDocumentFromReader(htmlReader)
 	if err != nil {
 		log.Println("JobHandler.SetFastAnswer.HasError", err)
 	}
+	doc.Find(".bNg8Rb").Remove()
 
 	fastSelector := doc.Find(".kp-blk.c2xzTb")
 	fastHtml, _ := fastSelector.Html()
 	if !strings.Contains("youtube.com", fastHtml) {
 
 	}
+	return fast
+}
+
+func (j *JobHandler) ParsePhotos(keyword string, imageSource string, cache bool) QaImageResult {
+	var result QaImageResult
+
+	img := mysql.GetImgTakeFree(j.task.SiteId, keyword, true)
+	if img.Id.Valid {
+		result.Url = img.Url.String
+		result.Author = img.Author.String
+		result.ShortLink = img.ShortUrl.String
+		result.Id = img.SourceId.String
+		return result
+	}
+
+	if imageSource == "flickr" {
+		client := flickr.NewFlickrClient(j.config.FlickrKey.String, j.config.FlickrSecret.String)
+		client.Init()
+		client.Args.Set("method", "flickr.photos.search")
+		client.Args.Set("text", keyword)
+		client.Args.Set("media", "photos")
+		client.Args.Set("extras", "url_z,owner_name")
+		client.Args.Set("sort", "relevance")
+		client.Args.Set("orientation", "landscape")
+		client.Args.Set("license", "4")
+		client.Args.Set("per_page", "5")
+		client.Args.Set("page", "1")
+
+		client.OAuthSign()
+		response := &flickr.BasicResponse{}
+		err := flickr.DoGet(client, response)
+
+		if err != nil {
+			fmt.Println("JobHandler.ParsePhotos.Flickr.HasError", err)
+		} else {
+			fmt.Println("Api response:", response.Extra)
+		}
+
+		var resp XmlPhotos
+
+		err = xml.Unmarshal([]byte(response.Extra), &resp)
+		if err != nil {
+			log.Println("JobHandler.ParsePhotos.Flickr.HasError.1", err)
+		}
+		if len(resp.Photos) > 0 {
+			for _, item := range resp.Photos {
+				result.Id = strconv.Itoa(item.Id)
+				result.Url = item.Url
+				result.Author = item.OwnerName
+
+				if cache {
+					_, err := mysql.AddImg(map[string]interface{}{
+						"site_id":   j.task.SiteId,
+						"source_id": item.Id,
+						"url":       item.Url,
+						"status":    1,
+						"source":    1,
+						"keyword":   keyword,
+						"short_url": "https://flic.kr/p/" + base58.Encode([]byte(strconv.Itoa(item.Id))),
+						"author":    item.OwnerName,
+					})
+					if err != nil {
+						fmt.Println("JobHandler.ParsePhotos.Flickr.HasError.2", err)
+					}
+				}
+
+				return result
+			}
+		}
+	}else if imageSource == "google" {
+		j.task.SetLog("Парсим фото через Google")
+
+		var (
+			link string
+			sourceId string
+			author string
+		)
+		if err := chromedp.Run(j.ctx,
+			chromedp.Click(".qs[data-sc=I]", chromedp.ByQuery),
+			chromedp.Sleep(time.Second * 3),
+			chromedp.Click(".islrc .isv-r:first-child .wXeWr", chromedp.ByQuery),
+			chromedp.Sleep(time.Second * 7),
+			chromedp.AttributeValue(".BIB1wf .n3VNCb", "src", &link, nil, chromedp.ByQuery),
+			chromedp.AttributeValue(".islrc .isv-r:first-child", "data-id", &sourceId, nil, chromedp.ByQuery),
+			chromedp.InnerHTML(".islrc .isv-r:first-child .fxgdke", &author, chromedp.ByQuery),
+		); err != nil {
+			log.Println("JobHandler.ParsePhotos.Google.HasError", err)
+		}
+
+		var encodedImg string
+		if strings.Contains(link, ";base64,") {
+			reg := regexp.MustCompile(`(.*?),(.*)`)
+			result.Url = reg.ReplaceAllString(link, "$2")
+			result.Encoded = true
+		}else{
+			result.Url = regexp.MustCompile(`^(.*?)\?.*`).ReplaceAllString(link, `$1`)
+		}
+
+		result.Id = sourceId
+		result.Author = author
+
+		if cache && encodedImg == "" {
+			_, err := mysql.AddImg(map[string]interface{}{
+				"site_id":   j.task.SiteId,
+				"source_id": sourceId,
+				"url":       result.Url,
+				"status":    1,
+				"source":    1,
+				"keyword":   keyword,
+				"short_url": "",
+				"author":    author,
+			})
+			if err != nil {
+				fmt.Println("JobHandler.ParsePhotos.Google.HasError.1", err)
+			}
+		}
+
+	}
+	return result
 }
 
 func (j *JobHandler) CheckPaa(html string) bool {
@@ -998,4 +1163,64 @@ func (j *JobHandler) CheckFinished() bool {
 	default:
 		return false
 	}
+}
+
+func (j *JobHandler) AntiCaptcha(url string, html string) (string, error) {
+	paaReader := strings.NewReader(html)
+	doc, err := goquery.NewDocumentFromReader(paaReader)
+	if err != nil {
+		log.Println("JobHandler.AntiCaptcha.HasError", err)
+		return "", err
+	}
+
+	siteKey, _ := doc.Find("#recaptcha").Attr("data-sitekey")
+	sToken, _ := doc.Find("#recaptcha").Attr("data-s")
+
+	c := &Captcha{
+		j.config.Antigate.String,
+		url,
+		siteKey,
+		sToken,
+		"http",
+		j.Browser.Proxy.Host,
+		j.Browser.Proxy.Port,
+		j.Browser.Proxy.Login,
+		j.Browser.Proxy.Password,
+		j.Browser.Proxy.Agent,
+		time.Minute * 2,
+	}
+
+	key, err := c.SendRecaptcha()
+	if err != nil {
+		log.Println("JobHandler.AntiCaptcha.2.HasError", err)
+	}
+	return key, err
+}
+
+func (j *JobHandler) SetTimeout(secs int) bool {
+	if j.Browser.ctx == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(j.Browser.ctx, time.Duration(secs) * time.Second)
+	j.CancelTimeout = cancel
+	j.ctx = ctx
+
+	return true
+}
+
+func (j *JobHandler) Cancel() {
+	if j.CancelTimeout != nil {
+		j.CancelTimeout()
+	}
+	if !LocalTest {
+		j.isFinished <- true
+	}
+}
+
+func (j *JobHandler) Reload() {
+	if j.CancelTimeout != nil {
+		j.CancelTimeout()
+	}
+	j.Browser.Reload()
+	j.SetTimeout(150)
 }

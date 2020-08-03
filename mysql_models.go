@@ -45,6 +45,7 @@ type MysqlConfig struct {
 	Antigate sql.NullString `db:"antigate" json:"antigate"`
 	Language sql.NullString `db:"language" json:"language"`
 	Variants sql.NullString `db:"variants" json:"variants"`
+	Extra sql.NullString `db:"extra" json:"extra"`
 }
 
 type MysqlCat struct {
@@ -133,8 +134,8 @@ type MysqlFreeTask struct {
 	MoreTags string `db:"more_tags" json:"more_tags"`
 	SymbMicroMarking string `db:"symb_micro_marking" json:"symb_micro_marking"`
 	CountRows int `db:"count_rows" json:"count_rows"`
-	SavingAvailable bool `json:"saving_available"`
-	Extra FreeTaskExtra `json:"extra"`
+	SavingAvailable bool `db:"saving_available" json:"saving_available"`
+	Extra ConfigExtra `db:"extra" json:"extra"`
 }
 
 type MysqlProxy struct {
@@ -148,5 +149,17 @@ type MysqlProxy struct {
 	Status sql.NullInt64 `json:"status"`
 	Parser sql.NullString `json:"parser"`
 	Timeout sql.NullString `json:"timeout"`
+}
+
+type MysqlImage struct {
+	Id sql.NullInt64 `json:"id" db:"id"`
+	SiteId sql.NullInt64 `json:"site_id" db:"site_id"`
+	SourceId sql.NullString `json:"source_id" db:"source_id"`
+	Url sql.NullString `json:"url" db:"url"`
+	Author sql.NullString `json:"author" db:"author"`
+	ShortUrl sql.NullString `json:"short_url" db:"short_url"`
+	Keyword sql.NullString `json:"keyword" db:"keyword"`
+	Source sql.NullBool `json:"source" db:"source"`
+	Status sql.NullBool `json:"status" db:"status"`
 }
 

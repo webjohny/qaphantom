@@ -31,6 +31,16 @@ func (u *Utils) ArrayRand(arr []string) string {
 	return strings.Trim(arr[n], " ")
 }
 
+func (u *Utils) RandStringRunes(n int) string {
+	letterRunes := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
+}
+
 func (u *Utils) SetInterval(someFunc func(), milliseconds int, async bool) chan bool {
 
 	// How often to fire the passed in function

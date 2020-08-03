@@ -11,11 +11,10 @@ import (
 
 type MysqlDb struct {
 	db *sqlx.DB
-	conf Configuration
 }
 
 func (m *MysqlDb) CreateConnection() {
-	conn, err := sqlx.Connect("mysql", m.conf.MysqlLogin + ":" + m.conf.MysqlPass + "@tcp(" + m.conf.MysqlHost + ")/" + m.conf.MysqlDb)
+	conn, err := sqlx.Connect("mysql", conf.MysqlLogin + ":" + conf.MysqlPass + "@tcp(" + conf.MysqlHost + ")/" + conf.MysqlDb)
 	if err != nil {
 		panic(err)
 	}

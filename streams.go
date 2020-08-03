@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math/rand"
 	"os/exec"
+	"strconv"
+	"sync"
 	"time"
 )
 
@@ -34,6 +36,14 @@ func (s *Stream) StartTaskTimer(streamId int, limit int64) {
 	} else if s.browser.isOpened {
 		fmt.Println("Start job", limit)
 		s.browser.limit = limit
+		for {
+			if s.browser.ctx == nil {
+				s.browser.Reload()
+				time.Sleep(time.Minute * 5)
+			}else{
+				break
+			}
+		}
 		s.job.Browser = s.browser
 		s.job.isFinished = make(chan bool)
 		s.job.IsStart = true
@@ -43,13 +53,54 @@ func (s *Stream) StartTaskTimer(streamId int, limit int64) {
 	select {
 	case <-s.ctxTimer.Done():
 		fmt.Println("Timeout job")
-		s.CancelTimer()
+		if s.CancelTimer != nil {
+			s.CancelTimer()
+		}
 		s.job.Cancel()
 
 	case <-s.job.isFinished:
 		fmt.Println("End job")
-		s.CancelTimer()
+		if s.CancelTimer != nil {
+			s.CancelTimer()
+		}
 	}
+}
+
+func (s *Streams) StartStreams(count int, limit int, cmd string) {
+	fmt.Println("Started")
+	for i := 1; i <= count; i++ {
+		stream := streams.Add(i)
+		if cmd != "" {
+			stream.cmd = cmd + " " + strconv.Itoa(i)
+		}else{
+			stream.job = JobHandler{}
+		}
+		go stream.Start(i, int64(limit))
+	}
+}
+
+func (s *Streams) ReStartStreams(count int, limit int, cmd string) {
+	fmt.Println("Restarted streams")
+	streams.StopAllWithoutClean()
+	time.Sleep(time.Second * 600)
+	s.StartStreams(count, limit, cmd)
+}
+
+func (s *Streams) StartLoop(count int, limit int, cmd string) {
+	s.StopAll()
+
+	var restartFunc func()
+
+	restartFunc = func() {
+		if streams.isStarted {
+			s.ReStartStreams(count, limit, cmd)
+			time.AfterFunc(time.Second * 2400, restartFunc)
+		}
+	}
+	time.AfterFunc(time.Second * 2400, restartFunc)
+
+	streams.isStarted = true
+	go s.StartStreams(count, limit, cmd)
 }
 
 func (s *Stream) Start(streamId int, limit int64) {
@@ -58,7 +109,14 @@ func (s *Stream) Start(streamId int, limit int64) {
 	time.Sleep(time.Millisecond * time.Duration(streamId * 500))
 
 	if s.cmd == "" {
-		s.browser.Init()
+		for {
+			if !s.browser.Init() {
+				s.browser.Cancel()
+				time.Sleep(time.Minute * 5)
+			}else{
+				break
+			}
+		}
 	}
 
 	for {
@@ -91,6 +149,7 @@ func (s *Stream) Stop() {
 type Streams struct {
 	isStarted bool
 	items map[int]*Stream
+	mu sync.RWMutex
 }
 
 func (s *Streams) Get(id int) *Stream{
@@ -102,10 +161,12 @@ func (s *Streams) Get(id int) *Stream{
 }
 
 func (s *Streams) Add(id int) *Stream{
+	s.mu.Lock()
 	if len(s.items) < 1 {
 		s.items = map[int]*Stream{}
 	}
 	s.items[id] = &Stream{}
+	s.mu.Unlock()
 	return s.items[id]
 }
 

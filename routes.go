@@ -2,19 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
 	"strconv"
 )
 
-type Routes struct {
-	conf Configuration
-	mysql MysqlDb
-	utils Utils
-	streams Streams
-}
+type Routes struct {}
 
 func (rt *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -39,23 +33,10 @@ func (rt *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (rt *Routes) StartStreams(count int, limit int, cmd string) {
-	fmt.Println("Started")
-	for i := 1; i <= count; i++ {
-		stream := rt.streams.Add(i)
-		if cmd != "" {
-			stream.cmd = cmd + " " + strconv.Itoa(i)
-		}else{
-			stream.job = JobHandler{}
-		}
-		go stream.Start(i, int64(limit))
-	}
-}
-
 func (rt *Routes) StopStream(w http.ResponseWriter, r *http.Request) {
 	id := utils.toInt(r.FormValue("id"))
 
-	rt.streams.Stop(id)
+	streams.Stop(id)
 }
 
 func (rt *Routes) Run() {
@@ -75,5 +56,5 @@ func (rt *Routes) Run() {
 	r.HandleFunc("/run/job", rt.RunJob).Methods("GET")
 	r.HandleFunc("/stream/stop", rt.StopStream).Methods("POST")
 
-	log.Fatal(http.ListenAndServe(":" + rt.conf.Port, r))
+	log.Fatal(http.ListenAndServe(":" + conf.Port, r))
 }

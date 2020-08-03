@@ -9,9 +9,12 @@ import (
 	"time"
 )
 
-type FreeTaskExtra struct {
-	DeepPaa bool
-	RedirectMethod bool
+type ConfigExtra struct {
+	DeepPaa bool `json:"deep_paa"`
+	RedirectMethod bool `json:"redirect_method"`
+	CountStreams int `json:"count_streams"`
+	LimitStreams int `json:"limit_streams"`
+	CmdStreams string `json:"cmd_streams"`
 }
 
 func (t *MysqlFreeTask) MergeTask(task MysqlTask) {
@@ -51,7 +54,7 @@ func (t *MysqlFreeTask) MergeSite(site MysqlSite){
 	t.CountRows = int(site.CountRows.Int64)
 	t.MoreTags = site.MoreTags.String
 	t.SymbMicroMarking = site.SymbMicroMarking.String
-	t.Extra = FreeTaskExtra{}
+	t.Extra = ConfigExtra{}
 
 	var extra map[string]interface{}
 	_ = json.Unmarshal([]byte(site.Extra.String), &extra)
@@ -60,6 +63,15 @@ func (t *MysqlFreeTask) MergeSite(site MysqlSite){
 	}
 	if v, ok := extra["redirect_method"] ; ok {
 		t.Extra.RedirectMethod = v.(bool)
+	}
+	if v, ok := extra["count_streams"] ; ok {
+		t.Extra.CountStreams = v.(int)
+	}
+	if v, ok := extra["limit_streams"] ; ok {
+		t.Extra.LimitStreams = v.(int)
+	}
+	if v, ok := extra["cmd_streams"] ; ok {
+		t.Extra.CmdStreams = v.(string)
 	}
 }
 

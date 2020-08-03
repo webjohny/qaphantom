@@ -86,6 +86,18 @@ func (m *MysqlDb) GetFreeTask(id int) MysqlFreeTask {
 	return freeTask
 }
 
+func (m *MysqlDb) CountWorkingTasks() int {
+	rows, _ := m.db.Query("SELECT COUNT(*) as count FROM `tasks` WHERE `timeout` IS NOT NULL AND `parser` IS NOT NULL")
+	var count int
+	for rows.Next() {
+		err := rows.Scan(&count)
+		if err != nil {
+			log.Println("MysqlTasks.CountWorkingTasks.HasError", err)
+		}
+	}
+	return count
+}
+
 func (m *MysqlDb) GetTaskByKeyword(k string) MysqlTask {
 	var result MysqlTask
 	sqlQuery := "SELECT * FROM `tasks` WHERE `keyword` = ? LIMIT 1"

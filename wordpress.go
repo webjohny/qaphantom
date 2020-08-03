@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/base64"
+	"fmt"
 	wpXmlrpc "github.com/abcdsxg/go-wordpress-xmlrpc"
 	"github.com/gosimple/slug"
+	"github.com/h2non/filetype"
 	"github.com/kolo/xmlrpc"
 	"io/ioutil"
 	"log"
@@ -239,27 +241,51 @@ func (w *Wordpress) CheckConn() bool {
 	return w.client != nil
 }
 
-func (w *Wordpress) UploadFile(url string, postId int) (WpImage, error) {
+func (w *Wordpress) UploadFile(url string, postId int, encoded bool) (WpImage, error) {
 	var image WpImage
+	var bytes []byte
+	var err error
+	var name string
 
-	resp, _ := http.Get(url)
-	defer resp.Body.Close()
+	if !encoded {
+		resp, _ := http.Get(url)
+		defer resp.Body.Close()
 
-	bytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Println("Wordpress.UploadFile.HasError", err)
-		return image, err
+		bytes, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Println("Wordpress.UploadFile.HasError", err)
+			return image, err
+		}
+		name = path.Base(url)
+	}else{
+		bytes, err = base64.StdEncoding.DecodeString(url)
+		if err != nil {
+			log.Println("Wordpress.UploadFile.HasError.1", err)
+			return image, err
+		}
+		kind, _ := filetype.Match(bytes)
+		if kind == filetype.Unknown {
+			fmt.Println("Wordpress.UploadFile.HasError.2", "Unknown file type")
+			return image, nil
+		}
+
+		name = utils.RandStringRunes(20) + "." + kind.Extension
 	}
-	mime := http.DetectContentType(bytes)
-	name := path.Base(url)
 
-	encoded := base64.StdEncoding.EncodeToString(bytes)
+	mime := http.DetectContentType(bytes)
+	if !strings.Contains(mime, "image") {
+		return image, nil
+	}
+
+	encodedImg := base64.StdEncoding.EncodeToString(bytes)
 
 	params := map[string]interface{}{
+		"overwrite": true,
 		"name": name,
 		"type": mime,
-		"bits": xmlrpc.Base64(encoded),
+		"bits": xmlrpc.Base64(encodedImg),
 	}
+
 	if postId != 0 {
 		params["post_id"] = postId
 	}
@@ -271,15 +297,22 @@ func (w *Wordpress) UploadFile(url string, postId int) (WpImage, error) {
 	if err != nil {
 		log.Println("Wordpress.UploadFile.2.HasError", err)
 		w.err = err
-		image.Id = response["id"].(int)
+	}else if response != nil{
+		image.Id = utils.toInt(response["id"].(string))
 		image.Url = response["link"].(string)
+		title := path.Base(response["url"].(string))
 		image.UrlMedium = response["link"].(string)
-		metadata := response["metadata"].(map[string]interface{})
-		title := response["title"].(string)
-		if response["metadata"] != "" {
-			sites := metadata["sites"].(map[string]map[string]string)
-			if sites["medium"]["file"] != "" {
-				image.UrlMedium = strings.Replace(image.UrlMedium, title, sites["medium"]["file"], 1)
+		if response["metadata"] != nil {
+			metadata := response["metadata"].(map[string]interface{})
+			if metadata["sizes"] != nil {
+				sizes := metadata["sizes"].(map[string]interface{})
+				if sizes["medium"] != nil {
+					medium := sizes["medium"].(map[string]interface{})
+					if medium["file"] != nil {
+						file := medium["file"].(string)
+						image.UrlMedium = strings.Replace(image.UrlMedium, title, file, 1)
+					}
+				}
 			}
 		}
 		return image, err

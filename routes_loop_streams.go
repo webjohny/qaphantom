@@ -6,15 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"time"
 )
-
-func (rt *Routes) ReStartStreams(count int, limit int, cmd string) {
-	fmt.Println("Restarted streams")
-	rt.streams.StopAllWithoutClean()
-	time.Sleep(time.Second * 600)
-	rt.StartStreams(count, limit, cmd)
-}
 
 func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
 	count := utils.toInt(r.FormValue("count"))
@@ -25,20 +17,14 @@ func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
 		limit = 10
 	}
 
-	rt.streams.StopAll()
+	config := mysql.GetConfig()
+	extra := config.GetExtra()
+	extra.CmdStreams = cmd
+	extra.LimitStreams = limit
+	extra.CountStreams = count
+	_ = mysql.SetExtra(extra)
 
-	var restartFunc func()
-
-	restartFunc = func() {
-		if rt.streams.isStarted {
-			rt.ReStartStreams(count, limit, cmd)
-			time.AfterFunc(time.Second * 3600, restartFunc)
-		}
-	}
-	time.AfterFunc(time.Second * 3600, restartFunc)
-
-	rt.streams.isStarted = true
-	go rt.StartStreams(count, limit, cmd)
+	streams.StartLoop(count, limit, cmd)
 
 	err := json.NewEncoder(w).Encode(map[string]bool{
 		"status": true,
@@ -49,8 +35,8 @@ func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rt *Routes) StopLoopStreams(w http.ResponseWriter, r *http.Request) {
-	rt.streams.isStarted = false
-	go rt.streams.StopAll()
+	streams.isStarted = false
+	go streams.StopAll()
 
 	err := json.NewEncoder(w).Encode(map[string]bool{
 		"status": true,
@@ -61,7 +47,7 @@ func (rt *Routes) StopLoopStreams(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rt *Routes) CountLoopStreams(w http.ResponseWriter, r *http.Request) {
-	count := rt.streams.Count()
+	count := streams.Count()
 
 	_, err := fmt.Fprintln(w, strconv.Itoa(count))
 	if err != nil {

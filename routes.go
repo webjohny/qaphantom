@@ -56,5 +56,7 @@ func (rt *Routes) Run() {
 	r.HandleFunc("/run/job", rt.RunJob).Methods("GET")
 	r.HandleFunc("/stream/stop", rt.StopStream).Methods("POST")
 
+	r.HandleFunc("/test/proxy", rt.TestProxy).Methods("GET")
+
 	log.Fatal(http.ListenAndServe(":" + conf.Port, r))
 }

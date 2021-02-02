@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func (rt *Routes) GetFreeTask(w http.ResponseWriter, r *http.Request) {
@@ -89,4 +91,55 @@ func (rt *Routes) GetTasks(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println("RoutesGet.GetTasks.HasError", err)
 	}
+}
+
+func (rt *Routes) TestProxy(w http.ResponseWriter, r *http.Request) {
+	var errMsg string
+
+	host := r.FormValue("host")
+	port := r.FormValue("port")
+	login := r.FormValue("login")
+	password := r.FormValue("password")
+
+	//host := "89.191.225.148"
+	//port := "45785"
+	//login := "phillip"
+	//password := "I2n9BeJ"
+
+	if host == "" {
+		errMsg = "undefined host"
+	} else if port == "" {
+		errMsg = "undefined port"
+	} else {
+		proxy := Proxy{
+			Id:       1,
+			Host:     host,
+			Port:     port,
+			Login:    login,
+			Password: password,
+			LocalIp:  host + ":" + port,
+		}
+		browser := Browser{}
+		browser.Proxy = proxy
+		browser.Init()
+
+		ctx, cancel := context.WithTimeout(browser.ctx, time.Second*15)
+		browser.CancelTimeout = cancel
+		browser.ctx = ctx
+		defer browser.Cancel()
+
+		status, buffer := browser.ScreenShot("https://www.google.com/search?hl=en&gl=us&q=what+is+my+ip")
+		if !status {
+			errMsg = string(buffer)
+		} else {
+			w.Header().Set("Content-Type", "image/png")
+			w.Header().Set("Content-Length", strconv.Itoa(len(buffer)))
+			if _, err := w.Write(buffer); err != nil {
+				errMsg = "unable to write image"
+			}else{
+				return
+			}
+		}
+	}
+	_, _ = w.Write([]byte(errMsg))
 }

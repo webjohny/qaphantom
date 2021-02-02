@@ -39,14 +39,16 @@ func (b *Browser) Init() bool {
 		b.limit = 60
 	}
 
-	// Подключаемся к прокси
-	b.Proxy.NewProxy()
-	if b.Proxy.Id < 1 {
-		return false
-	}
+	if b.Proxy.Host == "" {
+		// Подключаемся к прокси
+		b.Proxy.NewProxy()
+		if b.Proxy.Id < 1 {
+			return false
+		}
 
-	//@todo Commented
-	b.Proxy.SetTimeout(b.streamId, 5)
+		//@todo Commented
+		b.Proxy.SetTimeout(b.streamId, 5)
+	}
 
 	proxyScheme := b.Proxy.LocalIp
 
@@ -134,4 +136,45 @@ func (b *Browser) Reload() bool {
 
 func (b *Browser) ChangeTab() {
 
+}
+
+func (b *Browser) ScreenShot(url string) (bool, []byte) {
+
+	if url == "" {
+		return false, []byte("undefined url")
+	}
+
+	var buf []byte
+	if err := chromedp.Run(b.ctx,
+		chromedp.Navigate(url),
+		chromedp.ActionFunc(func(ctxt context.Context) error {
+			_, viewLayout, contentRect, err := page.GetLayoutMetrics().Do(ctxt)
+			if err != nil {
+				return err
+			}
+
+			v := page.Viewport{
+				X:      contentRect.X,
+				Y:      contentRect.Y,
+				Width:  viewLayout.ClientWidth, // or contentRect.Width,
+				Height: viewLayout.ClientHeight,
+				Scale:  1,
+			}
+			log.Printf("Capture %#v", v)
+			buf, err = page.CaptureScreenshot().WithClip(&v).Do(ctxt)
+			if err != nil {
+				return err
+			}
+			return nil
+		}),
+	); err != nil {
+		log.Println("Browser.ScreenShotSave.HasError", err)
+		return false, []byte(err.Error())
+	}
+
+	if len(buf) < 1 {
+		return false, []byte("undefined image")
+	}
+
+	return true, buf
 }

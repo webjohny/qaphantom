@@ -125,9 +125,9 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	// Берём свободную задачу в работу
 	var task MysqlFreeTask
 	if j.taskId < 1 {
-		task = mysql.GetFreeTask(0)
+		task = MYSQL.GetFreeTask(0)
 	}else{
-		task = mysql.GetFreeTask(j.taskId)
+		task = MYSQL.GetFreeTask(j.taskId)
 	}
 
 	//log.Fatal(task)
@@ -170,7 +170,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	var searchHtml string
 	var googleUrl string
 
-	j.config = mysql.GetConfig()
+	j.config = MYSQL.GetConfig()
 
 	for i := 1; i < 2; i++ {
 
@@ -258,8 +258,14 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	if j.CheckFinished() {
 		task.SetLog("Задача завершилась преждевременно из-за таймаута")
-		go j.Cancel()
+		j.Cancel()
 		return false, "Timeout"
+	}
+
+	if searchHtml == "" {
+		j.Cancel()
+		task.SetLog("Контент не подгрузился, задачу закрываем")
+		return
 	}
 
 	task.SetLog("Блоки загружены")
@@ -353,7 +359,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	symb := task.GetRandSymb()
 
 	for _, setting := range settings {
-		if _, err := mysql.AddResult(map[string]interface{}{
+		if _, err := MYSQL.AddResult(map[string]interface{}{
 			//"a" : setting.Text,
 			"cat_id" : task.CatId,
 			"site_id" : task.SiteId,
@@ -368,8 +374,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			task.SetLog("Не сохранился результат. (" + err.Error() + ")")
 		}
 
-		if task.SavingAvailable && !mysql.GetTaskByKeyword(setting.Question).Id.Valid {
-			if _, err := mysql.AddTask(map[string]interface{}{
+		if task.SavingAvailable && !MYSQL.GetTaskByKeyword(setting.Question).Id.Valid {
+			if _, err := MYSQL.AddTask(map[string]interface{}{
 				"site_id" : strconv.Itoa(task.SiteId),
 				"cat_id" : strconv.Itoa(task.CatId),
 				"parent_id" : strconv.Itoa(task.Id),
@@ -387,7 +393,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		reg := regexp.MustCompile(`\s+`)
 		text = reg.ReplaceAllString(text, ` `)
 
-		matches := utils.PregMatch(`(?P<sen>.+?\.)`, text)
+		matches := UTILS.PregMatch(`(?P<sen>.+?\.)`, text)
 		if matches["sen"] != "" {
 			text = matches["sen"]
 		}else{
@@ -465,7 +471,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 					q.H = 3
 					ch3 = 2
 				} else if ch3 == 2 {
-					if utils.RandBool() {
+					if UTILS.RandBool() {
 						q.H = 3
 						ch3 = 3
 					}else {
@@ -648,7 +654,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			doc.Find("#contents.ytd-section-list-renderer").Find("a.ytd-thumbnail").Each(func(i int, s *goquery.Selection) {
 				if len(videos) != vCount {
 					link, _ := s.Attr("href")
-					videos = append(videos, utils.YoutubeEmbed(link))
+					videos = append(videos, UTILS.YoutubeEmbed(link))
 					task.SetLog(link)
 				}
 			})
@@ -712,8 +718,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				qaTotalPage.Content += mainImg
 				// Ответ разбиваем по предложениям
 				if !strings.Contains(item.Text, "<ul>") && !strings.Contains(item.Text, "<ol>") && !strings.Contains(item.Text, "<h3>") {
-					formattedText := utils.StripTags(item.Text)
-					splittedText := utils.SentenceSplit(formattedText)
+					formattedText := UTILS.StripTags(item.Text)
+					splittedText := UTILS.SentenceSplit(formattedText)
 					qaTotalPage.Content += "<p>" + strings.Join(splittedText, ".</p><p>") + ".</p>\n"
 				} else {
 					// Просто ставим ответ
@@ -855,7 +861,7 @@ func (j *JobHandler) RedirectParsing(stats *QaStats) map[string]QaSetting {
 			text := strings.Replace(s.Find(".mod").Text(), date, "", -1)
 			txtTtml, _ := s.Find(".mod").Html()
 
-			if j.task.ParseDoubles > 0 || !mysql.GetResultByQAndA(question, text).Id.Valid {
+			if j.task.ParseDoubles > 0 || !MYSQL.GetResultByQAndA(question, text).Id.Valid {
 				// Берём уникальный идентификатор для вопроса
 				stats.All++
 				ved, _ := s.Find(".cbphWd").Attr("data-ved")
@@ -950,7 +956,7 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 		text := strings.Replace(s.Find(".mod").Text(), date, "", -1)
 		txtTtml, _ := s.Find(".mod").Html()
 
-		if j.task.ParseDoubles > 0 || !mysql.GetResultByQAndA(question, text).Id.Valid {
+		if j.task.ParseDoubles > 0 || !MYSQL.GetResultByQAndA(question, text).Id.Valid {
 			// Берём уникальный идентификатор для вопроса
 			stats.All++
 			ved, _ := s.Find(".cbphWd").Attr("data-ved")
@@ -1033,7 +1039,7 @@ func (j *JobHandler) SetFastAnswer(html string) QaFast {
 func (j *JobHandler) ParsePhotos(keyword string, imageSource string, cache bool) QaImageResult {
 	var result QaImageResult
 
-	img := mysql.GetImgTakeFree(j.task.SiteId, keyword, true)
+	img := MYSQL.GetImgTakeFree(j.task.SiteId, keyword, true)
 	if img.Id.Valid {
 		result.Url = img.Url.String
 		result.Author = img.Author.String
@@ -1078,7 +1084,7 @@ func (j *JobHandler) ParsePhotos(keyword string, imageSource string, cache bool)
 				result.Author = item.OwnerName
 
 				if cache {
-					_, err := mysql.AddImg(map[string]interface{}{
+					_, err := MYSQL.AddImg(map[string]interface{}{
 						"site_id":   j.task.SiteId,
 						"source_id": item.Id,
 						"url":       item.Url,
@@ -1129,7 +1135,7 @@ func (j *JobHandler) ParsePhotos(keyword string, imageSource string, cache bool)
 		result.Author = author
 
 		if cache && encodedImg == "" {
-			_, err := mysql.AddImg(map[string]interface{}{
+			_, err := MYSQL.AddImg(map[string]interface{}{
 				"site_id":   j.task.SiteId,
 				"source_id": sourceId,
 				"url":       result.Url,

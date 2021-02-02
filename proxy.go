@@ -23,7 +23,7 @@ type Proxy struct {
 }
 
 func (p *Proxy) NewProxy() {
-	proxy := mysql.GetFreeProxy()
+	proxy := MYSQL.GetFreeProxy()
 	p.Id = int(proxy.Id.Int64)
 	p.Host = proxy.Host.String
 	p.Port = proxy.Port.String
@@ -31,6 +31,7 @@ func (p *Proxy) NewProxy() {
 	p.Password = proxy.Password.String
 	p.Agent = proxy.Agent.String
 	p.LocalIp = p.Host + ":" + p.Port
+
 }
 
 func (p Proxy) SetTimeout(parser int, minutes int) sql.Result {
@@ -41,7 +42,7 @@ func (p Proxy) SetTimeout(parser int, minutes int) sql.Result {
 	data["parser"] = strconv.Itoa(parser)
 	data["timeout"] = formattedDate
 
-	res, err := mysql.UpdateProxy(data, p.Id)
+	res, err := MYSQL.UpdateProxy(data, p.Id)
 	if err != nil {
 		log.Println("Proxy.SetTimeout.HasError", err)
 	}
@@ -57,7 +58,7 @@ func (p Proxy) FreeProxy() {
 	data["parser"] = "NULL"
 	data["timeout"] = formattedDate
 
-	_, err := mysql.UpdateProxy(data, p.Id)
+	_, err := MYSQL.UpdateProxy(data, p.Id)
 	if err != nil {
 		log.Println("Proxy.FreeProxy.HasError", err)
 	}

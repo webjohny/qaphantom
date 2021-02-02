@@ -9,22 +9,22 @@ import (
 )
 
 func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
-	count := utils.toInt(r.FormValue("count"))
-	limit := utils.toInt(r.FormValue("limit"))
+	count := UTILS.toInt(r.FormValue("count"))
+	limit := UTILS.toInt(r.FormValue("limit"))
 	cmd := r.FormValue("cmd")
 
 	if limit < 1 {
 		limit = 10
 	}
 
-	config := mysql.GetConfig()
+	config := MYSQL.GetConfig()
 	extra := config.GetExtra()
 	extra.CmdStreams = cmd
 	extra.LimitStreams = limit
 	extra.CountStreams = count
-	_ = mysql.SetExtra(extra)
+	_ = MYSQL.SetExtra(extra)
 
-	streams.StartLoop(count, limit, cmd)
+	STREAMS.StartLoop(count, limit, cmd)
 
 	err := json.NewEncoder(w).Encode(map[string]bool{
 		"status": true,
@@ -35,8 +35,8 @@ func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rt *Routes) StopLoopStreams(w http.ResponseWriter, r *http.Request) {
-	streams.isStarted = false
-	go streams.StopAll()
+	STREAMS.isStarted = false
+	go STREAMS.StopAll()
 
 	err := json.NewEncoder(w).Encode(map[string]bool{
 		"status": true,
@@ -47,7 +47,7 @@ func (rt *Routes) StopLoopStreams(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rt *Routes) CountLoopStreams(w http.ResponseWriter, r *http.Request) {
-	count := streams.Count()
+	count := STREAMS.Count()
 
 	_, err := fmt.Fprintln(w, strconv.Itoa(count))
 	if err != nil {

@@ -8,33 +8,26 @@ import (
 )
 
 var (
-	utils Utils
-	mysql MysqlDb
-	conf Configuration
-	streams Streams
+	UTILS Utils
+	MYSQL MysqlDb
+	CONF Configuration
+	STREAMS Streams
 )
 
-var LocalTest = false
+var LocalTest = true
 
 func main() {
-	utils = Utils{}
-
-	conf = Configuration{}
-	conf.Create()
+	CONF.Create()
 
 	// Connect to MysqlDB
-	mysql = MysqlDb{}
-	mysql.CreateConnection()
-
-	streams = Streams{}
+	MYSQL.CreateConnection()
 
 	// Run routes
-	routes := Routes{}
 
-	if LocalTest {
-
-		TestScreen()
-		log.Fatal("")
+	//if LocalTest {
+	//
+	//	TestScreen()
+	//	log.Fatal("")
 
 		job := JobHandler{}
 		job.IsStart = true
@@ -48,14 +41,15 @@ func main() {
 			//job.Run(0)
 			//job.Run(0)
 		}
-	}else if mysql.CountWorkingTasks() > 0 {
-		config := mysql.GetConfig()
-		extra := config.GetExtra()
-		if extra.CountStreams > 0 {
-			streams.StartLoop(extra.CountStreams, extra.LimitStreams, extra.CmdStreams)
-		}
-	}
+	//}else if MYSQL.CountWorkingTasks() > 0 {
+	//	config := MYSQL.GetConfig()
+	//	extra := config.GetExtra()
+	//	if extra.CountStreams > 0 {
+	//		STREAMS.StartLoop(extra.CountStreams, extra.LimitStreams, extra.CmdStreams)
+	//	}
+	//}
 
+	routes := Routes{}
 	routes.Run()
 
 	time.Sleep(time.Minute)

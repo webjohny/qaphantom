@@ -34,9 +34,9 @@ func (rt *Routes) CmdTimer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rt *Routes) StopStream(w http.ResponseWriter, r *http.Request) {
-	id := utils.toInt(r.FormValue("id"))
+	id := UTILS.toInt(r.FormValue("id"))
 
-	streams.Stop(id)
+	STREAMS.Stop(id)
 }
 
 func (rt *Routes) Run() {
@@ -58,5 +58,5 @@ func (rt *Routes) Run() {
 
 	r.HandleFunc("/test/proxy", rt.TestProxy).Methods("GET")
 
-	log.Fatal(http.ListenAndServe(":" + conf.Port, r))
+	log.Fatal(http.ListenAndServe(":" + CONF.Port, r))
 }

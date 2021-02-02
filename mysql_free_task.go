@@ -93,7 +93,7 @@ func (t *MysqlFreeTask) SetFinished(status int, errorMsg string) {
 	data["timeout"] = "NULL"
 	data["parse_date"] = formattedDate
 
-	_, err := mysql.UpdateTask(data, t.Id)
+	_, err := MYSQL.UpdateTask(data, t.Id)
 	if err != nil {
 		log.Println("MysqlFreeTask.SetFinished.HasError", err)
 	}
@@ -116,7 +116,7 @@ func (t *MysqlFreeTask) FreeTask() {
 	data["timeout"] = "NULL"
 	data["try_count"] = t.TryCount
 
-	_, err := mysql.UpdateTask(data, t.Id)
+	_, err := MYSQL.UpdateTask(data, t.Id)
 	if err != nil {
 		log.Println("MysqlFreeTask.FreeTask.HasError", err)
 	}
@@ -137,7 +137,7 @@ func (t *MysqlFreeTask) SetTimeout(parser int) {
 	data["parser"] = strconv.Itoa(parser)
 	data["timeout"] = formattedDate
 
-	_, err := mysql.UpdateTask(data, t.Id)
+	_, err := MYSQL.UpdateTask(data, t.Id)
 	if err != nil {
 		log.Println("MysqlFreeTask.SetTimeout.HasError", err)
 	}
@@ -160,7 +160,7 @@ func (t *MysqlFreeTask) SetError(error string) {
 	data["timeout"] = "NULL"
 	data["parse_date"] = formattedDate
 
-	_, err := mysql.UpdateTask(data, t.Id)
+	_, err := MYSQL.UpdateTask(data, t.Id)
 	if err != nil {
 		log.Println("MysqlFreeTask.SetError.HasError", err)
 	}
@@ -183,7 +183,7 @@ func (t *MysqlFreeTask) SaveLog() {
 	data["log"] = strings.Join(t.Log, "\n")
 	data["log_last"] = t.Log[len(t.Log) - 1]
 
-	_, err := mysql.UpdateTask(data, t.Id)
+	_, err := MYSQL.UpdateTask(data, t.Id)
 	if err != nil {
 		log.Println("MysqlFreeTask.SaveLog.HasError", err)
 	}
@@ -197,7 +197,7 @@ func (t *MysqlFreeTask) GetRandDomain() string {
 		if err != nil {
 			log.Println("MysqlFreeTask.GetRandDomain.HasError", err)
 		}else {
-			return utils.ArrayRand(arr)
+			return UTILS.ArrayRand(arr)
 		}
 	}
 	return ""
@@ -211,7 +211,7 @@ func (t *MysqlFreeTask) GetRandSymb() string {
 		if err != nil {
 			log.Println("MysqlFreeTask.GetRandSymb.HasError", err)
 		}else {
-			return utils.ArrayRand(arr)
+			return UTILS.ArrayRand(arr)
 		}
 	}
 	return ""
@@ -225,7 +225,7 @@ func (t *MysqlFreeTask) GetRandTag() string {
 		if err != nil {
 			log.Println("MysqlFreeTask.GetRandTag.HasError", err)
 		}else {
-			return utils.ArrayRand(arr)
+			return UTILS.ArrayRand(arr)
 		}
 	}
 	return ""

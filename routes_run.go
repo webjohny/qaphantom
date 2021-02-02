@@ -18,14 +18,14 @@ func (rt *Routes) RunJob(w http.ResponseWriter, r *http.Request) {
 	//el, items := items[len(items) - 1], items[:len(items) - 1]
 	//fmt.Println(el, items)
 
-	//text := utils.StripTags(htmlString)
+	//text := UTILS.StripTags(htmlString)
 	//
 	//reg := regexp.MustCompile(`\s+`)
 	//text = reg.ReplaceAllString(text, ` `)
 	//
-	//matches := utils.PregMatch(`(?P<sen>.+?\.)`, text)
+	//matches := UTILS.PregMatch(`(?P<sen>.+?\.)`, text)
 	//fmt.Println(matches["sen"])
-	//task := mysql.GetFreeTask([]string{})
+	//task := MYSQL.GetFreeTask([]string{})
 	//c, err := xmlrpc.NewClient("https://" + task.Domain + "/xmlrpc2.php", xmlrpc.UserInfo{
 	//	task.Login,
 	//	task.Password,

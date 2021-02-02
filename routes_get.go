@@ -21,7 +21,7 @@ func (rt *Routes) GetFreeTask(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println(ids)
 
-	question := mysql.GetFreeTask(0)
+	question := MYSQL.GetFreeTask(0)
 
 	err := json.NewEncoder(w).Encode(question)
 	if err != nil {
@@ -44,7 +44,7 @@ func (rt *Routes) GetCats(w http.ResponseWriter, r *http.Request) {
 		postData["title"] = r.FormValue("title")
 	}
 
-	cats := mysql.GetCats(params, postData)
+	cats := MYSQL.GetCats(params, postData)
 
 	err := json.NewEncoder(w).Encode(cats)
 	if err != nil {
@@ -54,16 +54,16 @@ func (rt *Routes) GetCats(w http.ResponseWriter, r *http.Request) {
 
 func (rt *Routes) GetTasksForStat(w http.ResponseWriter, r *http.Request) {
 
-	count := mysql.GetCountTasks(map[string]interface{}{})
+	count := MYSQL.GetCountTasks(map[string]interface{}{})
 
 	stat := map[int64]map[string]interface{}{}
 
-	//stat = mysql.CollectStats()
+	//stat = MYSQL.CollectStats()
 
-	go mysql.LoopCollectStats()
+	go MYSQL.LoopCollectStats()
 
 	if count > 10000 {
-		sites := mysql.GetSites(map[string]interface{}{}, map[string]interface{}{})
+		sites := MYSQL.GetSites(map[string]interface{}{}, map[string]interface{}{})
 		if len(sites) > 0 {
 			for _, site := range sites {
 				info := site.GetInfo()
@@ -73,7 +73,7 @@ func (rt *Routes) GetTasksForStat(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}else{
-		stat = mysql.CollectStats()
+		stat = MYSQL.CollectStats()
 	}
 
 	err := json.NewEncoder(w).Encode(stat)
@@ -85,7 +85,7 @@ func (rt *Routes) GetTasksForStat(w http.ResponseWriter, r *http.Request) {
 func (rt *Routes) GetTasks(w http.ResponseWriter, r *http.Request) {
 	params := make(map[string]interface{})
 
-	tasks := mysql.GetTasks(params)
+	tasks := MYSQL.GetTasks(params)
 
 	err := json.NewEncoder(w).Encode(tasks)
 	if err != nil {

@@ -14,7 +14,7 @@ type MysqlDb struct {
 }
 
 func (m *MysqlDb) CreateConnection() {
-	conn, err := sqlx.Connect("mysql", conf.MysqlLogin + ":" + conf.MysqlPass + "@tcp(" + conf.MysqlHost + ")/" + conf.MysqlDb)
+	conn, err := sqlx.Connect("mysql", CONF.MysqlLogin + ":" + CONF.MysqlPass + "@tcp(" + CONF.MysqlHost + ")/" + CONF.MysqlDb)
 	if err != nil {
 		panic(err)
 	}

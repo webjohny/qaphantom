@@ -269,7 +269,7 @@ func (w *Wordpress) UploadFile(url string, postId int, encoded bool) (WpImage, e
 			return image, nil
 		}
 
-		name = utils.RandStringRunes(20) + "." + kind.Extension
+		name = UTILS.RandStringRunes(20) + "." + kind.Extension
 	}
 
 	mime := http.DetectContentType(bytes)
@@ -298,7 +298,7 @@ func (w *Wordpress) UploadFile(url string, postId int, encoded bool) (WpImage, e
 		log.Println("Wordpress.UploadFile.2.HasError", err)
 		w.err = err
 	}else if response != nil{
-		image.Id = utils.toInt(response["id"].(string))
+		image.Id = UTILS.toInt(response["id"].(string))
 		image.Url = response["link"].(string)
 		title := path.Base(response["url"].(string))
 		image.UrlMedium = response["link"].(string)

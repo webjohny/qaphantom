@@ -69,7 +69,7 @@ func (s *Stream) StartTaskTimer(streamId int, limit int64) {
 func (s *Streams) StartStreams(count int, limit int, cmd string) {
 	fmt.Println("Started")
 	for i := 1; i <= count; i++ {
-		stream := streams.Add(i)
+		stream := STREAMS.Add(i)
 		if cmd != "" {
 			stream.cmd = cmd + " " + strconv.Itoa(i)
 		}else{
@@ -81,7 +81,7 @@ func (s *Streams) StartStreams(count int, limit int, cmd string) {
 
 func (s *Streams) ReStartStreams(count int, limit int, cmd string) {
 	fmt.Println("Restarted streams")
-	streams.StopAllWithoutClean()
+	STREAMS.StopAllWithoutClean()
 	time.Sleep(time.Second * 600)
 	s.StartStreams(count, limit, cmd)
 }
@@ -92,14 +92,14 @@ func (s *Streams) StartLoop(count int, limit int, cmd string) {
 	var restartFunc func()
 
 	restartFunc = func() {
-		if streams.isStarted {
+		if STREAMS.isStarted {
 			s.ReStartStreams(count, limit, cmd)
 			time.AfterFunc(time.Second * 2400, restartFunc)
 		}
 	}
 	time.AfterFunc(time.Second * 2400, restartFunc)
 
-	streams.isStarted = true
+	STREAMS.isStarted = true
 	go s.StartStreams(count, limit, cmd)
 }
 

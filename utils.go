@@ -128,9 +128,9 @@ func (u *Utils) Format(str string) string {
 	reg = regexp.MustCompile(`(?m)<span[^<>]*>[JFMASOND][a-z]{2}\s\d{1,2},\s\d{4}</span>`)
 	str = reg.ReplaceAllString(str, ``)
 
-	headingMatch := utils.PregMatch(`(?m)<div[^<>]*role="heading"><b>(?P<title>.+)</b></div>`, str)
+	headingMatch := UTILS.PregMatch(`(?m)<div[^<>]*role="heading"><b>(?P<title>.+)</b></div>`, str)
 	heading := headingMatch["title"]
-	heading = utils.StripTags(heading)
+	heading = UTILS.StripTags(heading)
 
 	str, _ = sanitize.HTMLAllowing(str, []string{
 		"table", "thead", "tbody", "tr", "td", "th",

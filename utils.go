@@ -26,7 +26,7 @@ func (u *Utils) MysqlRealEscapeString(value string) string {
 }
 
 func (u *Utils) ArrayRand(arr []string) string {
-	rand.Seed(time.Now().Unix())
+	rand.Seed(time.Now().UnixNano())
 	n := rand.Int() % len(arr)
 	return strings.Trim(arr[n], " ")
 }

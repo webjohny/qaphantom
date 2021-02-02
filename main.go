@@ -14,8 +14,6 @@ var (
 	STREAMS Streams
 )
 
-var LocalTest = true
-
 func main() {
 	CONF.Create()
 
@@ -24,7 +22,7 @@ func main() {
 
 	// Run routes
 
-	//if LocalTest {
+	//if CONF.Env != "local" {
 	//
 	//	TestScreen()
 	//	log.Fatal("")
@@ -62,7 +60,7 @@ func TestScreen() {
 	login := "phillip"
 	password := "I2n9BeJ"
 
-	proxy := Proxy{
+	proxy := &Proxy{
 		Id:       1,
 		Host:     host,
 		Port:     port,

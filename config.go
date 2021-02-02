@@ -6,6 +6,7 @@ import (
 )
 
 type Configuration struct {
+	Env      string
 	Port      string
 	ProxyApi  string
 	ProxyKey  string

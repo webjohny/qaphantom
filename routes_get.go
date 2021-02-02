@@ -111,7 +111,7 @@ func (rt *Routes) TestProxy(w http.ResponseWriter, r *http.Request) {
 	} else if port == "" {
 		errMsg = "undefined port"
 	} else {
-		proxy := Proxy{
+		proxy := &Proxy{
 			Id:       1,
 			Host:     host,
 			Port:     port,

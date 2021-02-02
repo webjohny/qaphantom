@@ -954,7 +954,7 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 			date = s.Find(".Od5Jsd").Text()
 		}
 		text := strings.Replace(s.Find(".mod").Text(), date, "", -1)
-		txtTtml, _ := s.Find(".mod").Html()
+		txtHtml, _ := s.Find(".mod").Html()
 
 		if j.task.ParseDoubles > 0 || !MYSQL.GetResultByQAndA(question, text).Id.Valid {
 			// Берём уникальный идентификатор для вопроса
@@ -964,7 +964,7 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 				qa := QaSetting{}
 				qa.Question = question
 				qa.Text = text
-				qa.Html = txtTtml
+				qa.Html = txtHtml
 				qa.Link = link
 				qa.LinkTitle = s.Find(".g .LC20lb").Text()
 				qa.Date = date
@@ -983,7 +983,7 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 					}
 				}
 
-				if strings.Contains(txtTtml, "youtube.com/watch") || strings.Contains(txtTtml, "Suggested clip") {
+				if strings.Contains(txtHtml, "youtube.com/watch") || strings.Contains(txtHtml, "Suggested clip") {
 					stats.Yt++
 				}else{
 					stats.S++
@@ -1218,7 +1218,7 @@ func (j *JobHandler) Cancel() {
 	if j.CancelTimeout != nil {
 		j.CancelTimeout()
 	}
-	if !LocalTest {
+	if CONF.Env != "local" {
 		j.isFinished <- true
 	}
 }

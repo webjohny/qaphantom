@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/fetch"
@@ -22,7 +23,7 @@ type Browser struct {
 	CancelBrowser context.CancelFunc
 	CancelTimeout context.CancelFunc
 	CancelLogger context.CancelFunc
-	Proxy Proxy
+	Proxy *Proxy
 	ctx context.Context
 
 	isOpened bool
@@ -39,21 +40,26 @@ func (b *Browser) Init() bool {
 		b.limit = 60
 	}
 
-	if b.Proxy.Host == "" {
+	if b.Proxy == nil || b.Proxy.Host == "" {
+		b.Proxy = &Proxy{}
 		// Подключаемся к прокси
-		b.Proxy.NewProxy()
-		if !b.checkProxy(b.Proxy) && b.Proxy.Id < 1 {
+		if !b.Proxy.newProxy(){
 			return false
 		}
 
+		if b.Proxy != nil && !b.checkProxy(b.Proxy) && b.Proxy.Id < 1 {
+			return false
+		}
+		return false
+
 		//@todo Commented
-		b.Proxy.SetTimeout(b.streamId, 5)
+		b.Proxy.setTimeout(b.streamId, 5)
 	}
 
 	options := b.setOpts(b.Proxy)
 
 
-	if LocalTest {
+	if CONF.Env == "local" {
 		options = append(options, chromedp.Flag("headless", false))
 	}
 
@@ -67,23 +73,37 @@ func (b *Browser) Init() bool {
 	b.CancelLogger = cancel
 
 	if err := chromedp.Run(taskCtx,
-		chromedp.ActionFunc(func (ctx context.Context) error {
-			b.ctx = ctx
-			return nil
-		}),
 		chromedp.Sleep(time.Second),
 		b.setProxyToContext(b.Proxy),
 	); err != nil {
 		log.Println("Browser.Init.HasError", err)
 		return false
 	}
+	b.ctx = taskCtx
 
 	b.isOpened = true
 	return true
 }
 
-func (b *Browser) checkProxy(proxy Proxy) bool {
+func (b *Browser) checkProxy(proxy *Proxy) bool {
+	if proxy == nil {
+		return false
+	}
+
 	options := b.setOpts(proxy)
+	if CONF.Env == "local" {
+		options = append(options, chromedp.Flag("headless", false))
+	}
+
+	keyWords := []string{
+		"whats+my+ip",
+		"ssh+run+command",
+		"how+work+with+git",
+		"bitcoin+price+2013+year",
+		"онлайн+обменник+крипта+рубль",
+		"где+купить+акции",
+		"i+want+to+spend+crypto",
+	}
 
 	// Запускаем контекст браузера
 	allocCtx, cancelBrowser := chromedp.NewExecAllocator(context.Background(), options...)
@@ -92,21 +112,34 @@ func (b *Browser) checkProxy(proxy Proxy) bool {
 	taskCtx, cancelTask := chromedp.NewContext(allocCtx)
 	defer cancelTask()
 
-	taskCtx.Deadline()
-
 	var searchHtml string
 
 	if err := chromedp.Run(taskCtx,
 		b.setProxyToContext(proxy),
 		b.runWithTimeOut(&taskCtx, 10, chromedp.Tasks{
-			chromedp.Navigate("https://www.google.com/search?q=whats+my+ip"),
+			chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
 			chromedp.Sleep(3),
 			chromedp.WaitVisible("body", chromedp.ByQuery),
 			// Вытащить html на проверку каптчи
 			chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
 		}),
 	); err != nil {
-		log.Println("Browser.Init.HasError", err)
+		log.Println("Browser.checkProxy.HasError", err)
+		return false
+	}
+
+	if err := chromedp.Run(taskCtx,
+		b.setProxyToContext(proxy),
+		//b.runWithTimeOut(&taskCtx, 10, chromedp.Tasks{
+			chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
+			chromedp.Sleep(3),
+			chromedp.WaitVisible("body", chromedp.ByQuery),
+			// Вытащить html на проверку каптчи
+			chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
+		chromedp.Sleep(300),
+		//}),
+	); err != nil {
+		log.Println("Browser.checkProxy.HasError", err)
 		return false
 	}
 
@@ -114,7 +147,8 @@ func (b *Browser) checkProxy(proxy Proxy) bool {
 }
 
 
-func (b *Browser) setProxyToContext(proxy Proxy) chromedp.Tasks {
+func (b *Browser) setProxyToContext(proxy *Proxy) chromedp.Tasks {
+	fmt.Print(proxy.Login, proxy.Password)
 	return chromedp.Tasks{
 		network.Enable(),
 		performance.Enable(),
@@ -126,21 +160,23 @@ func (b *Browser) setProxyToContext(proxy Proxy) chromedp.Tasks {
 	}
 }
 
-func (b *Browser) setOpts(proxy Proxy) []chromedp.ExecAllocatorOption {
+func (b *Browser) setOpts(proxy *Proxy) []chromedp.ExecAllocatorOption {
 	opts := append(
 		chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.DisableGPU,
 		chromedp.NoSandbox,
 	)
 
-	proxyScheme := proxy.LocalIp
+	if proxy != nil {
+		proxyScheme := proxy.LocalIp
 
-	if proxyScheme != "" {
-		opts = append(opts, chromedp.ProxyServer(proxyScheme))
-	}
+		if proxyScheme != "" {
+			opts = append(opts, chromedp.ProxyServer(proxyScheme))
+		}
 
-	if proxy.Agent != "" {
-		opts = append(opts, chromedp.UserAgent(proxy.Agent))
+		if proxy.Agent != "" {
+			opts = append(opts, chromedp.UserAgent(proxy.Agent))
+		}
 	}
 	return opts
 }
@@ -164,7 +200,7 @@ func (b *Browser) Cancel() {
 		b.CancelTimeout()
 	}
 	if b.Proxy.LocalIp != "" {
-		b.Proxy.FreeProxy()
+		b.Proxy.freeProxy()
 	}
 	b.isOpened = false
 }

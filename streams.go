@@ -17,7 +17,7 @@ type Stream struct {
 	browser Browser
 	cmd string
 	ctxTimer context.Context
-	CancelTimer context.CancelFunc
+	cancelTimer context.CancelFunc
 }
 
 func (s *Stream) StartTaskTimer(streamId int, limit int64) {
@@ -27,8 +27,8 @@ func (s *Stream) StartTaskTimer(streamId int, limit int64) {
 		limit = 360
 	}
 
-	s.ctxTimer, s.CancelTimer = context.WithTimeout(context.Background(), time.Second * time.Duration(limit))
-	defer s.CancelTimer()
+	s.ctxTimer, s.cancelTimer = context.WithTimeout(context.Background(), time.Second * time.Duration(limit))
+	defer s.cancelTimer()
 
 	if cmd != "" {
 		//php -f /var/www/html/cron.php parser cron sleeping 5
@@ -53,15 +53,15 @@ func (s *Stream) StartTaskTimer(streamId int, limit int64) {
 	select {
 	case <-s.ctxTimer.Done():
 		fmt.Println("Timeout job")
-		if s.CancelTimer != nil {
-			s.CancelTimer()
+		if s.cancelTimer != nil {
+			s.cancelTimer()
 		}
 		s.job.Cancel()
 
 	case <-s.job.isFinished:
 		fmt.Println("End job")
-		if s.CancelTimer != nil {
-			s.CancelTimer()
+		if s.cancelTimer != nil {
+			s.cancelTimer()
 		}
 	}
 }
@@ -137,8 +137,8 @@ func (s *Stream) Start(streamId int, limit int64) {
 
 func (s *Stream) Stop() {
 	s.state = false
-	if s.CancelTimer != nil {
-		s.CancelTimer()
+	if s.cancelTimer != nil {
+		s.cancelTimer()
 	}
 	s.browser.Cancel()
 	s.job.IsStart = false

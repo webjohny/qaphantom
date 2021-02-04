@@ -49,9 +49,12 @@ func (b *Browser) Init() bool {
 		}
 
 		if b.Proxy != nil && !b.checkProxy(b.Proxy) && b.Proxy.Id < 1 {
+			fmt.Println(b.Proxy)
+			if b.Proxy != nil {
+				fmt.Println(b.Proxy.Id < 1)
+			}
 			return false
 		}
-		return false
 
 		//@todo Commented
 		b.Proxy.setTimeout(b.streamId, 5)
@@ -64,23 +67,27 @@ func (b *Browser) Init() bool {
 		options = append(options, chromedp.Flag("headless", false))
 	}
 
-	// Запускаем контекст браузера
-	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), options...)
-	b.CancelBrowser = cancel
+	if b.ctx == nil {
+		fmt.Println("NEW INSTANCE")
+		// Запускаем контекст браузера
+		allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), options...)
 
-	// Устанавливаем собственный logger
-	//, chromedp.WithDebugf(log.Printf)
-	taskCtx, cancel := chromedp.NewContext(allocCtx)
-	b.CancelLogger = cancel
+		// Устанавливаем собственный logger
+		//, chromedp.WithDebugf(log.Printf)
+		taskCtx, cancel := chromedp.NewContext(allocCtx)
+		b.cancelTask = cancel
 
-	if err := chromedp.Run(taskCtx,
-		chromedp.Sleep(time.Second),
-		b.setProxyToContext(b.Proxy),
-	); err != nil {
-		log.Println("Browser.Init.HasError", err)
-		return false
+		if err := chromedp.Run(taskCtx,
+			chromedp.Sleep(time.Second),
+			b.setProxyToContext(b.Proxy),
+		); err != nil {
+			log.Println("Browser.Init.HasError", err)
+			return false
+		}
+		b.ctx = taskCtx
 	}
-	b.ctx = taskCtx
+
+	fmt.Println("RETURN TRUE")
 
 	b.isOpened = true
 	return true
@@ -107,11 +114,8 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 	}
 
 	// Запускаем контекст браузера
-	allocCtx, cancelBrowser := chromedp.NewExecAllocator(context.Background(), options...)
-	defer cancelBrowser()
-
+	allocCtx, _ := chromedp.NewExecAllocator(context.Background(), options...)
 	taskCtx, cancelTask := chromedp.NewContext(allocCtx)
-	defer cancelTask()
 
 	var searchHtml string
 
@@ -121,31 +125,21 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 		b.setProxyToContext(proxy),
 		b.runWithTimeOut(10, false, chromedp.Tasks{
 			chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
-			chromedp.Sleep(300 * time.Second),
+			chromedp.Sleep(2 * time.Second),
 			chromedp.WaitVisible("body", chromedp.ByQuery),
 			// Вытащить html на проверку каптчи
 			chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
 		}),
 	); err != nil {
 		log.Println("Browser.checkProxy.HasError", err)
-		return false
 	}
 
-	if err := chromedp.Run(taskCtx,
-		//b.runWithTimeOut(&taskCtx, 10, chromedp.Tasks{
-			chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
-			chromedp.Sleep(3),
-			chromedp.WaitVisible("body", chromedp.ByQuery),
-			// Вытащить html на проверку каптчи
-			chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
-		chromedp.Sleep(300 * time.Second),
-		//}),
-	); err != nil {
-		log.Println("Browser.checkProxy.HasError", err)
-		return false
+	if searchHtml != "" {
+		b.ctx = taskCtx
+		return true
 	}
 
-	return searchHtml != ""
+	return false
 }
 
 
@@ -191,7 +185,6 @@ func (b *Browser) runWithTimeOut(timeout time.Duration, isStrict bool, tasks chr
 		})
 
 		err := tasks.Do(ctx)
-		fmt.Println(err)
 		if err != nil {
 			fmt.Println("ERR.Browser.runWithTimeOut", err)
 		}
@@ -206,11 +199,8 @@ func (b *Browser) runWithTimeOut(timeout time.Duration, isStrict bool, tasks chr
 }
 
 func (b *Browser) Cancel() {
-	if b.CancelBrowser != nil {
-		b.CancelBrowser()
-	}
-	if b.CancelLogger != nil {
-		b.CancelLogger()
+	if b.cancelTask != nil {
+		b.cancelTask()
 	}
 
 	if b.Proxy.LocalIp != "" {

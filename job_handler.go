@@ -112,11 +112,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	}
 
 	fmt.Println("Start task")
-	j.SetTimeout(150)
-	//if j.ctx.Err().Error() != "" {
-	//	fmt.Println("Stop browser", j.ctx.Err().Error())
-	//	return false, "Browser failed"
-	//}
 
 	var taskId int
 
@@ -183,8 +178,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		googleUrl = "https://www.google.com/search?hl=en&q=" + url.QueryEscape(task.Keyword)
 		task.SetLog("Открываем страницу (попытка №" + strconv.Itoa(i) + "): " + googleUrl)
 
-		if j.ctx != nil {
-			if err := chromedp.Run(j.ctx,
+		if j.Browser.ctx != nil {
+			if err := chromedp.Run(j.Browser.ctx,
 				// Устанавливаем страницу для парсинга
 				//chromedp.Sleep(time.Second * 60),
 				chromedp.Navigate(googleUrl),
@@ -207,18 +202,16 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 					key := ""
 					if key != "" {
 						task.SetLog("Anticaptcha: " + key)
-						if err := chromedp.Run(j.ctx,
-							chromedp.WaitVisible("captcha-form", chromedp.ByID),
-							chromedp.WaitVisible("g-recaptcha-response", chromedp.ByID),
-							chromedp.ActionFunc(func(ctx context.Context) error {
-								fmt.Println("Yes")
-								return nil
+						if err := chromedp.Run(j.Browser.ctx,
+							j.Browser.runWithTimeOut(300, false, chromedp.Tasks{
+								chromedp.WaitVisible("captcha-form", chromedp.ByID),
+								chromedp.WaitVisible("g-recaptcha-response", chromedp.ByID),
+								chromedp.SetValue(`g-recaptcha-response`, key, chromedp.ByID),
+								chromedp.Submit(`captcha-form`, chromedp.ByID),
+								chromedp.Sleep(time.Second*5),
+								chromedp.WaitVisible("body", chromedp.ByQuery),
+								chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
 							}),
-							chromedp.SetValue(`g-recaptcha-response`, key, chromedp.ByID),
-							chromedp.Submit(`captcha-form`, chromedp.ByID),
-							chromedp.Sleep(time.Second*5),
-							chromedp.WaitVisible("body", chromedp.ByQuery),
-							chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
 						); err != nil {
 							log.Println("JobHandler.Run.2.HasError", err)
 							task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
@@ -285,12 +278,14 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		duration = time.Duration(1)
 	}
 
-	if j.ctx != nil {
-		if err := chromedp.Run(j.ctx,
-			// Кликаем сразу на первый вопрос
-			chromedp.Click(".related-question-pair:first-child .cbphWd"),
-			// Ждём 0.3 секунды чтобы открылся вопрос
-			chromedp.Sleep(time.Second*duration),
+	if j.Browser.ctx != nil {
+		if err := chromedp.Run(j.Browser.ctx,
+			j.Browser.runWithTimeOut(10, false, chromedp.Tasks{
+				// Кликаем сразу на первый вопрос
+				chromedp.Click(".related-question-pair:first-child .cbphWd"),
+				// Ждём 0.3 секунды чтобы открылся вопрос
+				chromedp.Sleep(time.Second * duration),
+			}),
 		); err != nil {
 			log.Println("JobHandler.Run.4.HasError", err)
 			task.SetError("Отсутствует PAA. (" + err.Error() + ")")
@@ -310,7 +305,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	}
 
 	var settings map[string]QaSetting
-	if j.ctx != nil {
+	if j.Browser.ctx != nil {
 		// Запускаем функцию перебора вопросов
 		if j.config.GetExtra().RedirectMethod {
 			settings = j.RedirectParsing(&stats)
@@ -615,14 +610,16 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		// Парсим видео
 		var videosHtml string
-		if j.ctx != nil {
-			if err := chromedp.Run(j.ctx,
-				chromedp.Sleep(time.Second*time.Duration(rand.Intn(10))),
-				// Устанавливаем страницу для парсинга
-				chromedp.Navigate("https://www.youtube.com/results?search_query="+task.Keyword),
-				// Вытащить html со списком
-				chromedp.Sleep(time.Second*4),
-				chromedp.OuterHTML("body", &videosHtml, chromedp.ByQuery),
+		if j.Browser.ctx != nil {
+			if err := chromedp.Run(j.Browser.ctx,
+				j.Browser.runWithTimeOut(30, false, chromedp.Tasks{
+					chromedp.Sleep(time.Second * time.Duration(rand.Intn(10))),
+					// Устанавливаем страницу для парсинга
+					chromedp.Navigate("https://www.youtube.com/results?search_query=" + task.Keyword),
+					// Вытащить html со списком
+					chromedp.Sleep(time.Second * 4),
+					chromedp.OuterHTML("body", &videosHtml, chromedp.ByQuery),
+				}),
 			); err != nil {
 				log.Println("JobHandler.Run.7.HasError", err)
 				task.SetLog("Видео не спарсилось. (" + err.Error() + ")")
@@ -777,8 +774,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		// Определяем ID категории
 		qaTotalPage.CatId = wp.CatIdByName(task.Cat)
 		if qaTotalPage.CatId < 1 {
-			task.SetLog("Проблема с размещением в рубрику")
-			task.SetError(wp.err.Error())
+			go task.SetLog("Проблема с размещением в рубрику")
+			go task.SetError(wp.err.Error())
 			go j.Cancel()
 			return false, "Проблема с размещением в рубрику"
 		}
@@ -831,8 +828,10 @@ func (j *JobHandler) RedirectParsing(stats *QaStats) map[string]QaSetting {
 
 	for i := 0; i < stats.Wqc; i++ {
 		// Вытягиваем html код PAA для парсинга вопросов
-		if err := chromedp.Run(j.ctx,
-			chromedp.OuterHTML(`.kno-kp .ifM9O`, &paaHtml, chromedp.ByQuery),
+		if err := chromedp.Run(j.Browser.ctx,
+			j.Browser.runWithTimeOut(10, false, chromedp.Tasks{
+				chromedp.OuterHTML(`.kno-kp .ifM9O`, &paaHtml, chromedp.ByQuery),
+			}),
 		); err != nil {
 			log.Println("JobHandler.RedirectParsing.HasError", err)
 			return settings
@@ -894,8 +893,10 @@ func (j *JobHandler) RedirectParsing(stats *QaStats) map[string]QaSetting {
 		// Проверяем есть ли уже достаточное количество вопросов или всё таки нужно продолжить кликинг по блокам
 		if stats.All < stats.Wqc {
 			// Вытягиваем html код PAA для парсинга вопросов
-			if err := chromedp.Run(j.ctx,
-				chromedp.Navigate("https://www.google.com/search?hl=en&q=" + url.QueryEscape(lastQuestion)),
+			if err := chromedp.Run(j.Browser.ctx,
+				j.Browser.runWithTimeOut(10, false, chromedp.Tasks{
+					chromedp.Navigate("https://www.google.com/search?hl=en&q=" + url.QueryEscape(lastQuestion)),
+				}),
 			); err != nil {
 				log.Println("JobHandler.RedirectParsing.HasError", err)
 				return settings
@@ -918,15 +919,17 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 		return settings
 	}
 
-	if j.ctx == nil {
+	if j.Browser.ctx == nil {
 		j.IsStart = false
 		j.task.SetLog("Браузер не был запущен. Задача пропускается.")
 		return settings
 	}
 
 	// Вытягиваем html код PAA для парсинга вопросов
-	if err := chromedp.Run(j.ctx,
-		chromedp.OuterHTML(`.kno-kp .ifM9O`, &paaHtml, chromedp.ByQuery),
+	if err := chromedp.Run(j.Browser.ctx,
+		j.Browser.runWithTimeOut(10, false, chromedp.Tasks{
+			chromedp.OuterHTML(`.kno-kp .ifM9O`, &paaHtml, chromedp.ByQuery),
+		}),
 	); err != nil {
 		log.Println("JobHandler.ClickParsing.HasError", err)
 		return settings
@@ -977,8 +980,11 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 				// Собираем задачи для кликинга по вопросам
 				if _, ok := settings[ved]; !ok {
 					if isExpanded {
-						tasks = append(tasks, chromedp.Click(".cbphWd[data-ved=\""+ved+"\"]"))
-						tasks = append(tasks, chromedp.Sleep(time.Second*time.Duration(rand.Intn(5))))
+						tasks = append(tasks, chromedp.Tasks{
+							chromedp.Click(".cbphWd[data-ved=\"" + ved + "\"]"),
+							chromedp.Sleep(time.Second * time.Duration(rand.Intn(5))),
+						})
+
 						clicked[ved] = true
 					}
 				}
@@ -1001,7 +1007,9 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 			dest[v] = tasks[i]
 		}
 		if cap(dest) > 0 {
-			if err := chromedp.Run(j.ctx, dest); err != nil {
+			if err := chromedp.Run(j.Browser.ctx,
+				dest,
+			); err != nil {
 				log.Println("JobHandler.ClickParsing.3.HasError", err)
 				return settings
 			}
@@ -1110,14 +1118,16 @@ func (j *JobHandler) ParsePhotos(keyword string, imageSource string, cache bool)
 			sourceId string
 			author string
 		)
-		if err := chromedp.Run(j.ctx,
-			chromedp.Click(".qs[data-sc=I]", chromedp.ByQuery),
-			chromedp.Sleep(time.Second * 3),
-			chromedp.Click(".islrc .isv-r:first-child .wXeWr", chromedp.ByQuery),
-			chromedp.Sleep(time.Second * 7),
-			chromedp.AttributeValue(".BIB1wf .n3VNCb", "src", &link, nil, chromedp.ByQuery),
-			chromedp.AttributeValue(".islrc .isv-r:first-child", "data-id", &sourceId, nil, chromedp.ByQuery),
-			chromedp.InnerHTML(".islrc .isv-r:first-child .fxgdke", &author, chromedp.ByQuery),
+		if err := chromedp.Run(j.Browser.ctx,
+			j.Browser.runWithTimeOut(30, false, chromedp.Tasks{
+				chromedp.Click(".qs[data-sc=I]", chromedp.ByQuery),
+				chromedp.Sleep(time.Second * 3),
+				chromedp.Click(".islrc .isv-r:first-child .wXeWr", chromedp.ByQuery),
+				chromedp.Sleep(time.Second * 7),
+				chromedp.AttributeValue(".BIB1wf .n3VNCb", "src", &link, nil, chromedp.ByQuery),
+				chromedp.AttributeValue(".islrc .isv-r:first-child", "data-id", &sourceId, nil, chromedp.ByQuery),
+				chromedp.InnerHTML(".islrc .isv-r:first-child .fxgdke", &author, chromedp.ByQuery),
+			}),
 		); err != nil {
 			log.Println("JobHandler.ParsePhotos.Google.HasError", err)
 		}
@@ -1203,17 +1213,6 @@ func (j *JobHandler) AntiCaptcha(url string, html string) (string, error) {
 	return key, err
 }
 
-func (j *JobHandler) SetTimeout(secs int) bool {
-	if j.Browser.ctx == nil {
-		return false
-	}
-	ctx, cancel := context.WithTimeout(j.Browser.ctx, time.Duration(secs) * time.Second)
-	j.CancelTimeout = cancel
-	j.ctx = ctx
-
-	return true
-}
-
 func (j *JobHandler) Cancel() {
 	if j.CancelTimeout != nil {
 		j.CancelTimeout()
@@ -1228,5 +1227,4 @@ func (j *JobHandler) Reload() {
 		j.CancelTimeout()
 	}
 	j.Browser.Reload()
-	j.SetTimeout(150)
 }

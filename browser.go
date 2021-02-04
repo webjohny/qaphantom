@@ -21,8 +21,9 @@ type Browser struct {
 	BrowserContextID cdp.BrowserContextID
 
 	CancelBrowser context.CancelFunc
-	CancelTimeout context.CancelFunc
 	CancelLogger context.CancelFunc
+	cancelTask context.CancelFunc
+
 	Proxy *Proxy
 	ctx context.Context
 
@@ -114,11 +115,13 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 
 	var searchHtml string
 
+	b.cancelTask = cancelTask
+
 	if err := chromedp.Run(taskCtx,
 		b.setProxyToContext(proxy),
-		b.runWithTimeOut(&taskCtx, 10, chromedp.Tasks{
+		b.runWithTimeOut(10, false, chromedp.Tasks{
 			chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
-			chromedp.Sleep(3),
+			chromedp.Sleep(300 * time.Second),
 			chromedp.WaitVisible("body", chromedp.ByQuery),
 			// Вытащить html на проверку каптчи
 			chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
@@ -129,14 +132,13 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 	}
 
 	if err := chromedp.Run(taskCtx,
-		b.setProxyToContext(proxy),
 		//b.runWithTimeOut(&taskCtx, 10, chromedp.Tasks{
 			chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
 			chromedp.Sleep(3),
 			chromedp.WaitVisible("body", chromedp.ByQuery),
 			// Вытащить html на проверку каптчи
 			chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
-		chromedp.Sleep(300),
+		chromedp.Sleep(300 * time.Second),
 		//}),
 	); err != nil {
 		log.Println("Browser.checkProxy.HasError", err)
@@ -181,11 +183,25 @@ func (b *Browser) setOpts(proxy *Proxy) []chromedp.ExecAllocatorOption {
 	return opts
 }
 
-func (b *Browser) runWithTimeOut(ctx *context.Context, timeout time.Duration, tasks chromedp.Tasks) chromedp.ActionFunc {
+func (b *Browser) runWithTimeOut(timeout time.Duration, isStrict bool, tasks chromedp.Tasks) chromedp.ActionFunc {
+	cancel := b.cancelTask
 	return func(ctx context.Context) error {
-		timeoutContext, cancel := context.WithTimeout(ctx, timeout * time.Second)
-		defer cancel()
-		return tasks.Do(timeoutContext)
+		time.AfterFunc(timeout * time.Second, func(){
+			cancel()
+		})
+
+		err := tasks.Do(ctx)
+		fmt.Println(err)
+		if err != nil {
+			fmt.Println("ERR.Browser.runWithTimeOut", err)
+		}
+		if !isStrict {
+			cancel = func(){
+				fmt.Println("NOT CANCEL!")
+			}
+		}
+
+		return err
 	}
 }
 
@@ -196,9 +212,7 @@ func (b *Browser) Cancel() {
 	if b.CancelLogger != nil {
 		b.CancelLogger()
 	}
-	if b.CancelTimeout != nil {
-		b.CancelTimeout()
-	}
+
 	if b.Proxy.LocalIp != "" {
 		b.Proxy.freeProxy()
 	}

@@ -73,9 +73,8 @@ func TestScreen() {
 	browser.Init()
 
 	ctx, cancel := context.WithTimeout(browser.ctx, time.Second * 15)
-	browser.CancelTimeout = cancel
 	browser.ctx = ctx
-	defer browser.Cancel()
+	defer cancel()
 
 	status, buffer := browser.ScreenShot("https://www.google.com/search?hl=en&gl=us&q=what+is+my+ip")
 	if !status {

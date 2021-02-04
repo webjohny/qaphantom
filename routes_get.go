@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func (rt *Routes) GetFreeTask(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) getFreeTask(w http.ResponseWriter, r *http.Request) {
 	dataIds := r.FormValue("ids")
 
 	var ids []string
@@ -29,7 +29,7 @@ func (rt *Routes) GetFreeTask(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (rt *Routes) GetCats(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) getCats(w http.ResponseWriter, r *http.Request) {
 	params := make(map[string]interface{})
 
 	params["limit"] = r.FormValue("limit")
@@ -52,7 +52,7 @@ func (rt *Routes) GetCats(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (rt *Routes) GetTasksForStat(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) getTasksForStat(w http.ResponseWriter, r *http.Request) {
 
 	count := MYSQL.GetCountTasks(map[string]interface{}{})
 
@@ -82,7 +82,7 @@ func (rt *Routes) GetTasksForStat(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (rt *Routes) GetTasks(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) getTasks(w http.ResponseWriter, r *http.Request) {
 	params := make(map[string]interface{})
 
 	tasks := MYSQL.GetTasks(params)
@@ -93,7 +93,7 @@ func (rt *Routes) GetTasks(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (rt *Routes) TestProxy(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) testProxy(w http.ResponseWriter, r *http.Request) {
 	var errMsg string
 
 	host := r.FormValue("host")
@@ -124,8 +124,8 @@ func (rt *Routes) TestProxy(w http.ResponseWriter, r *http.Request) {
 		browser.Init()
 
 		ctx, cancel := context.WithTimeout(browser.ctx, time.Second*15)
-		browser.CancelTimeout = cancel
 		browser.ctx = ctx
+		defer cancel()
 		defer browser.Cancel()
 
 		status, buffer := browser.ScreenShot("https://www.google.com/search?hl=en&gl=us&q=what+is+my+ip")

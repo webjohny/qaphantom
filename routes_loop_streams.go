@@ -8,7 +8,7 @@ import (
 	"strconv"
 )
 
-func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) startLoopStreams(w http.ResponseWriter, r *http.Request) {
 	count := UTILS.toInt(r.FormValue("count"))
 	limit := UTILS.toInt(r.FormValue("limit"))
 	cmd := r.FormValue("cmd")
@@ -34,7 +34,7 @@ func (rt *Routes) StartLoopStreams(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (rt *Routes) StopLoopStreams(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) stopLoopStreams(w http.ResponseWriter, r *http.Request) {
 	STREAMS.isStarted = false
 	go STREAMS.StopAll()
 
@@ -46,7 +46,7 @@ func (rt *Routes) StopLoopStreams(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (rt *Routes) CountLoopStreams(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) countLoopStreams(w http.ResponseWriter, r *http.Request) {
 	count := STREAMS.Count()
 
 	_, err := fmt.Fprintln(w, strconv.Itoa(count))

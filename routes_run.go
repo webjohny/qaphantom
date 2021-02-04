@@ -4,7 +4,7 @@ import (
 	"net/http"
 )
 
-func (rt *Routes) RunJob(w http.ResponseWriter, r *http.Request) {
+func (rt *Routes) runJob(w http.ResponseWriter, r *http.Request) {
 	job := JobHandler{}
 	job.IsStart = true
 	job.Run(0)

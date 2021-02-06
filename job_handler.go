@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
+	"qaphantom/services"
 	"regexp"
 	"strconv"
 	"strings"
@@ -412,11 +413,11 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	if task.ParseSearch4 < 1 {
 		qaTotalPage := QaTotalPage{}
-		wp := Wordpress{}
+		wp := services.Wordpress{}
 		wp.Connect(`https://` + task.Domain + `/xmlrpc2.php`, task.Login, task.Password, 1)
 		if !wp.CheckConn() {
 			task.SetLog("Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")")
-			task.SetError(wp.err.Error())
+			task.SetError(wp.GetError().Error())
 			go j.Cancel()
 			return false, "Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")"
 		}
@@ -775,7 +776,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		qaTotalPage.CatId = wp.CatIdByName(task.Cat)
 		if qaTotalPage.CatId < 1 {
 			go task.SetLog("Проблема с размещением в рубрику")
-			go task.SetError(wp.err.Error())
+			go task.SetError(wp.GetError().Error())
 			go j.Cancel()
 			return false, "Проблема с размещением в рубрику"
 		}
@@ -801,7 +802,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		if fault {
 			task.SetLog("Не получилось разместить статью на сайте")
-			task.SetError(wp.err.Error())
+			task.SetError(wp.GetError().Error())
 			go j.Cancel()
 			return false, "Не получилось разместить статью на сайте"
 		}
@@ -1192,7 +1193,7 @@ func (j *JobHandler) AntiCaptcha(url string, html string) (string, error) {
 	siteKey, _ := doc.Find("#recaptcha").Attr("data-sitekey")
 	sToken, _ := doc.Find("#recaptcha").Attr("data-s")
 
-	c := &Captcha{
+	c := &services.Captcha{
 		j.config.Antigate.String,
 		url,
 		siteKey,

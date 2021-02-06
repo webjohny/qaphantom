@@ -4,21 +4,25 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"qaphantom/services"
 	"time"
 )
 
 var (
-	UTILS Utils
-	MYSQL MysqlDb
-	CONF Configuration
+	UTILS   Utils
+	MYSQL   MysqlDb
+	CONF    services.Configuration
 	STREAMS Streams
 )
 
 func main() {
-	CONF.Create()
+	path, _ := os.Getwd()
+
+	CONF.Create(path + "/config.json")
 
 	// Connect to MysqlDB
-	MYSQL.CreateConnection()
+	MYSQL.CreateConnection(CONF.MysqlHost, CONF.MysqlDb, CONF.MysqlLogin, CONF.MysqlPass)
 
 	// Run routes
 

@@ -13,8 +13,8 @@ type MysqlDb struct {
 	db *sqlx.DB
 }
 
-func (m *MysqlDb) CreateConnection() {
-	conn, err := sqlx.Connect("mysql", CONF.MysqlLogin + ":" + CONF.MysqlPass + "@tcp(" + CONF.MysqlHost + ")/" + CONF.MysqlDb)
+func (m *MysqlDb) CreateConnection(host string, db string, login string, pass string) {
+	conn, err := sqlx.Connect("mysql", login + ":" + pass + "@tcp(" + host + ")/" + db)
 	if err != nil {
 		panic(err)
 	}

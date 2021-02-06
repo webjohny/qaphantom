@@ -1,4 +1,4 @@
-package main
+package services
 
 import (
 	"encoding/json"
@@ -22,8 +22,7 @@ type Configuration struct {
 	MysqlPass   string
 }
 
-func (conf *Configuration) Create() {
-	var filename = "./config.json"
+func (conf *Configuration) Create(filename string) {
 
 	configFile, err := os.Open(filename)
 	defer configFile.Close()

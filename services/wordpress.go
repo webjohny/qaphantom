@@ -1,4 +1,4 @@
-package main
+package services
 
 import (
 	"encoding/base64"
@@ -9,6 +9,7 @@ import (
 	"github.com/kolo/xmlrpc"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"path"
 	"strconv"
@@ -51,6 +52,25 @@ type WpImage struct {
 	UrlMedium string
 }
 
+
+func randStringRunes(n int) string {
+	letterRunes := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
+}
+
+func toInt(value string) int {
+	var integer int = 0
+	if value != "" {
+		integer, _ = strconv.Atoi(value)
+	}
+	return integer
+}
+
 func (w *Wordpress) Connect(url string, username string, password string, blogId int) *wpXmlrpc.Client {
 	c, err := wpXmlrpc.NewClient(url, wpXmlrpc.UserInfo{
 		username,
@@ -66,6 +86,10 @@ func (w *Wordpress) Connect(url string, username string, password string, blogId
 		blogId, username, password,
 	}
 	return c
+}
+
+func (w *Wordpress) GetError() error {
+	return w.err
 }
 
 func (w *Wordpress) PrepareCat(cat map[string]interface{}) WpCat {
@@ -269,7 +293,7 @@ func (w *Wordpress) UploadFile(url string, postId int, encoded bool) (WpImage, e
 			return image, nil
 		}
 
-		name = UTILS.RandStringRunes(20) + "." + kind.Extension
+		name = randStringRunes(20) + "." + kind.Extension
 	}
 
 	mime := http.DetectContentType(bytes)
@@ -298,7 +322,7 @@ func (w *Wordpress) UploadFile(url string, postId int, encoded bool) (WpImage, e
 		log.Println("Wordpress.UploadFile.2.HasError", err)
 		w.err = err
 	}else if response != nil{
-		image.Id = UTILS.toInt(response["id"].(string))
+		image.Id = toInt(response["id"].(string))
 		image.Url = response["link"].(string)
 		title := path.Base(response["url"].(string))
 		image.UrlMedium = response["link"].(string)

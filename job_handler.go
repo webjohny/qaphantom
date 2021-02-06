@@ -5,23 +5,24 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"github.com/btcsuite/btcutil/base58"
-	"gopkg.in/masci/flickr.v2"
 	"log"
 	"math"
 	"math/rand"
 	"net/url"
 	"os"
-	"qaphantom/services"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"qaphantom/services"
+
 	"github.com/PuerkitoBio/goquery"
+	"github.com/btcsuite/btcutil/base58"
 	"github.com/gosimple/slug"
 	"github.com/webjohny/chromedp"
+	"gopkg.in/masci/flickr.v2"
 )
 
 type JobHandler struct {

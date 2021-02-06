@@ -5,14 +5,15 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"qaphantom/services"
 	"time"
+
+	"qaphantom/config"
 )
 
 var (
 	UTILS   Utils
 	MYSQL   MysqlDb
-	CONF    services.Configuration
+	CONF    config.Configuration
 	STREAMS Streams
 )
 
@@ -31,18 +32,40 @@ func main() {
 	//	TestScreen()
 	//	log.Fatal("")
 
-		job := JobHandler{}
-		job.IsStart = true
-		if job.Browser.Init() {
-			//job.taskId = 529235
+	//go func() {
+	//	job := JobHandler{}
+	//	job.IsStart = true
+	//	if job.Browser.Init() {
+	//		job.Run(0)
+	//		job.Run(1)
+	//		job.Run(1)
+	//	}
+	//}()
+	//
+	//time.Sleep(100)
+	//
+	//go func() {
+	//	job := JobHandler{}
+	//	job.IsStart = true
+	//	if job.Browser.Init() {
+	//		job.Run(1)
+	//		job.Run(0)
+	//		job.Run(2)
+	//	}
+	//}()
+	//
+	//time.Sleep(100)
+	//
+	//go func() {
+	//	job := JobHandler{}
+	//	job.IsStart = true
+	//	if job.Browser.Init() {
+	//		job.Run(0)
+	//		job.Run(2)
+	//		job.Run(1)
+	//	}
+	//}()
 
-			fmt.Println("Stop")
-			fmt.Println(job.Run(0))
-			job.Run(0)
-			//job.Run(0)
-			//job.Run(0)
-			//job.Run(0)
-		}
 	//}else if MYSQL.CountWorkingTasks() > 0 {
 	//	config := MYSQL.GetConfig()
 	//	extra := config.GetExtra()

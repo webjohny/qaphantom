@@ -810,7 +810,19 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		task.SetLog("Статья размещена на сайте")
 	}else{
-		task.SetLog(`Данные сохранены в "Search for"`)
+		_, err := AddSearchFor(map[string]interface{}{
+			"task_id": task.Id,
+			"site_id": task.SiteId,
+			"cat_id": task.CatId,
+			"title": ,
+			"link_title": ,
+			"keyword": task.Keyword,
+		})
+		if err != nil {
+			task.SetLog(`Данные не сохранились в "Search for"`)
+		}else{
+			task.SetLog(`Данные сохранены в "Search for"`)
+		}
 	}
 	task.SetFinished(1, "")
 	fmt.Println(taskId)

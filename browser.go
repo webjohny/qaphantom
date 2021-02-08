@@ -48,11 +48,7 @@ func (b *Browser) Init() bool {
 			return false
 		}
 
-		if b.Proxy != nil && !b.checkProxy(b.Proxy) && b.Proxy.Id < 1 {
-			fmt.Println(b.Proxy)
-			if b.Proxy != nil {
-				fmt.Println(b.Proxy.Id < 1)
-			}
+		if !b.checkProxy(b.Proxy) {
 			return false
 		}
 
@@ -132,6 +128,7 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 		}),
 	); err != nil {
 		log.Println("Browser.checkProxy.HasError", err)
+		return false
 	}
 
 	if searchHtml != "" {
@@ -178,23 +175,25 @@ func (b *Browser) setOpts(proxy *Proxy) []chromedp.ExecAllocatorOption {
 }
 
 func (b *Browser) runWithTimeOut(timeout time.Duration, isStrict bool, tasks chromedp.Tasks) chromedp.ActionFunc {
-	cancel := b.cancelTask
 	return func(ctx context.Context) error {
+		var check bool
 		time.AfterFunc(timeout * time.Second, func(){
-			cancel()
+			if !check {
+				b.cancelTask()
+			}
 		})
 
 		err := tasks.Do(ctx)
 		if err != nil {
 			fmt.Println("ERR.Browser.runWithTimeOut", err)
+			b.cancelTask()
+			return err
 		}
 		if !isStrict {
-			cancel = func(){
-				fmt.Println("NOT CANCEL!")
-			}
+			check = true
 		}
-
-		return err
+		fmt.Println("RUN_WITH_TIMEOUT")
+		return nil
 	}
 }
 

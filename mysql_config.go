@@ -60,6 +60,9 @@ func (c *MysqlConfig) GetExtra() ConfigExtra {
 	if v, ok := extra["redirect_method"] ; ok {
 		Extra.RedirectMethod = v.(bool)
 	}
+	if v, ok := extra["fast_parsing"] ; ok {
+		Extra.FastParsing = v.(bool)
+	}
 	if v, ok := extra["count_streams"] ; ok {
 		Extra.CountStreams = int(v.(float64))
 	}

@@ -12,6 +12,7 @@ import (
 type ConfigExtra struct {
 	DeepPaa bool `json:"deep_paa"`
 	RedirectMethod bool `json:"redirect_method"`
+	FastParsing bool `json:"fast_parsing"`
 	CountStreams int `json:"count_streams"`
 	LimitStreams int `json:"limit_streams"`
 	CmdStreams string `json:"cmd_streams"`

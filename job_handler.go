@@ -70,6 +70,7 @@ type QaFast struct {
 // Счётчик типов вопросов
 type QaStats struct {
 	All int // всего вопросов найдено
+	Checked int // всего вопросов найдено
 	Yt int // вопросы с youtube видео
 	S int // простые текстовые ответы
 
@@ -140,13 +141,12 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	j.task = task
 
 	if j.CheckFinished() {
-		task.SetLog("Задача завершилась преждевременно из-за таймаута")
+		task.FreeTask()
 		return false, "Timeout"
 	}
 
 	if task.TryCount == 5 {
-		task.SetLog("5-я неудавшаяся попытка парсинга. Исключаем ключевик")
-		task.SetFinished(2, "Исключён после 5 попыток парсинга")
+		task.FreeTask()
 		go j.Cancel()
 		return false, "Исключён после 5 попыток парсинга"
 	}
@@ -186,13 +186,13 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				//chromedp.Sleep(time.Second * 60),
 				chromedp.Navigate(googleUrl),
 				chromedp.Sleep(time.Second*time.Duration(rand.Intn(10))),
-				chromedp.WaitVisible("body", chromedp.ByQuery),
+				chromedp.WaitReady("body", chromedp.ByQuery),
 				// Вытащить html на проверку каптчи
 				chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
 			); err != nil {
 				log.Println("JobHandler.Run.HasError", err)
-				task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
-				continue
+				task.FreeTask()
+				return false, "Not found page"
 			} else {
 				if j.CheckCaptcha(searchHtml) {
 					task.SetLog("Есть каптча для " + j.Browser.Proxy.LocalIp + "...")
@@ -211,7 +211,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 								chromedp.SetValue(`g-recaptcha-response`, key, chromedp.ByID),
 								chromedp.Submit(`captcha-form`, chromedp.ByID),
 								chromedp.Sleep(time.Second*5),
-								chromedp.WaitVisible("body", chromedp.ByQuery),
+								chromedp.WaitReady("body", chromedp.ByQuery),
 								chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
 							}),
 						); err != nil {
@@ -245,14 +245,14 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				break
 			}
 		}else{
-			task.SetLog("Браузер не был запущен. Задача пропускается.")
+			task.FreeTask()
 			go j.Cancel()
 			return false, "Context undefined"
 		}
 	}
 
 	if j.CheckFinished() {
-		task.SetLog("Задача завершилась преждевременно из-за таймаута")
+		task.FreeTask()
 		j.Cancel()
 		return false, "Timeout"
 	}
@@ -295,13 +295,13 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			return false, "Отсутствует PAA."
 		}
 	}else{
-		task.SetLog("Браузер не был запущен. Задача пропускается.")
+		task.FreeTask()
 		go j.Cancel()
 		return false, "Context undefined"
 	}
 
 	if j.CheckFinished() {
-		task.SetLog("Задача завершилась преждевременно из-за таймаута")
+		task.FreeTask()
 		go j.Cancel()
 		return false, "Timeout"
 	}
@@ -762,7 +762,10 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		// Сохраняем текст
 		task.SetLog("Текст статьи сохранён в БД")
-		if (task.QaCountFrom > 0 && len(qaQs) < task.QaCountFrom) || (task.From > 0 && utf8.RuneCountInString(qaTotalPage.Content) < task.From) {
+		if !j.config.GetExtra().FastParsing && (
+			(task.QaCountFrom > 0 && len(qaQs) < task.QaCountFrom) ||
+			(task.From > 0 && utf8.RuneCountInString(qaTotalPage.Content) < task.From) ) {
+
 			task.SetError("Снята с публикации — слишком короткая статья получилась")
 			go j.Cancel()
 			return false, "Снята с публикации — слишком короткая статья получилась"
@@ -810,19 +813,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		task.SetLog("Статья размещена на сайте")
 	}else{
-		_, err := AddSearchFor(map[string]interface{}{
-			"task_id": task.Id,
-			"site_id": task.SiteId,
-			"cat_id": task.CatId,
-			"title": ,
-			"link_title": ,
-			"keyword": task.Keyword,
-		})
-		if err != nil {
-			task.SetLog(`Данные не сохранились в "Search for"`)
-		}else{
-			task.SetLog(`Данные сохранены в "Search for"`)
-		}
+		task.SetLog(`Данные сохранены в "Search for"`)
 	}
 	task.SetFinished(1, "")
 	fmt.Println(taskId)
@@ -863,6 +854,9 @@ func (j *JobHandler) RedirectParsing(stats *QaStats) map[string]QaSetting {
 
 		// Начинаем перебор блоков с вопросами
 		doc.Find(".related-question-pair").Each(func(i int, s *goquery.Selection) {
+			if j.config.GetExtra().FastParsing && stats.All > 6 {
+				return
+			}
 			question := s.Find(".cbphWd").Text()
 			link, _ := s.Find(".g a").Attr("href")
 
@@ -957,10 +951,15 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 		return settings
 	}
 
+	fmt.Println("FAST_PARSING", j.config.GetExtra().FastParsing)
+
 	var tasks chromedp.Tasks
 	clicked := map[string]bool{}
 	// Начинаем перебор блоков с вопросами
 	doc.Find(".related-question-pair").Each(func(i int, s *goquery.Selection) {
+		if j.config.GetExtra().FastParsing && stats.All > 6 {
+			return
+		}
 		question := s.Find(".cbphWd").Text()
 		link, _ := s.Find(".g a").Attr("href")
 		isExpanded :=  s.Find(".UgLoB").Length() > 0
@@ -1014,11 +1013,23 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 	})
 
 	// Проверяем есть ли уже достаточное количество вопросов или всё таки нужно продолжить кликинг по блокам
-	if stats.All < stats.Wqc && len(tasks) > 0 && j.config.GetExtra().DeepPaa {
+
+	var check bool
+
+	if stats.All < stats.Wqc && j.config.GetExtra().DeepPaa {
+		check = true
+	}
+
+	if j.config.GetExtra().FastParsing && stats.Checked > 5 {
+		check = false
+	}
+
+	if check && len(tasks) > 0 {
 		dest := make(chromedp.Tasks, len(tasks))
 		perm := rand.Perm(len(tasks))
 		for i, v := range perm {
 			dest[v] = tasks[i]
+			stats.Checked++
 		}
 		if cap(dest) > 0 {
 			if err := chromedp.Run(j.Browser.ctx,
@@ -1032,6 +1043,7 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 					setting.Clicked = v
 				}
 			}
+
 			// Продолжаем рекурсию
 			return j.ClickParsing(stats)
 		}
@@ -1134,13 +1146,13 @@ func (j *JobHandler) ParsePhotos(keyword string, imageSource string, cache bool)
 		)
 		if err := chromedp.Run(j.Browser.ctx,
 			j.Browser.runWithTimeOut(30, false, chromedp.Tasks{
-				chromedp.Click(".qs[data-sc=I]", chromedp.ByQuery),
+				chromedp.Navigate("https://www.google.com/search?q=" + url.QueryEscape(j.task.Keyword) + "&tbm=isch&source=lnms&sa=X"),
 				chromedp.Sleep(time.Second * 3),
 				chromedp.Click(".islrc .isv-r:first-child .wXeWr", chromedp.ByQuery),
 				chromedp.Sleep(time.Second * 7),
 				chromedp.AttributeValue(".BIB1wf .n3VNCb", "src", &link, nil, chromedp.ByQuery),
 				chromedp.AttributeValue(".islrc .isv-r:first-child", "data-id", &sourceId, nil, chromedp.ByQuery),
-				chromedp.InnerHTML(".islrc .isv-r:first-child .fxgdke", &author, chromedp.ByQuery),
+				chromedp.Text(".islrc .isv-r:first-child .fxgdke", &author, chromedp.ByQuery),
 			}),
 		); err != nil {
 			log.Println("JobHandler.ParsePhotos.Google.HasError", err)

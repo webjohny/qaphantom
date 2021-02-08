@@ -1,9 +1,6 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -27,88 +24,50 @@ func main() {
 
 	// Run routes
 
-	//if CONF.Env != "local" {
-	//
-	//	TestScreen()
-	//	log.Fatal("")
+	if CONF.Env == "local" {
+		go func() {
+			job := JobHandler{}
+			job.IsStart = true
+			if job.Browser.Init() {
+				job.Run(0)
+				//job.Run(1)
+				//job.Run(1)
+			}
+		}()
 
-	//go func() {
-	//	job := JobHandler{}
-	//	job.IsStart = true
-	//	if job.Browser.Init() {
-	//		job.Run(0)
-	//		job.Run(1)
-	//		job.Run(1)
-	//	}
-	//}()
-	//
-	//time.Sleep(100)
-	//
-	//go func() {
-	//	job := JobHandler{}
-	//	job.IsStart = true
-	//	if job.Browser.Init() {
-	//		job.Run(1)
-	//		job.Run(0)
-	//		job.Run(2)
-	//	}
-	//}()
-	//
-	//time.Sleep(100)
-	//
-	//go func() {
-	//	job := JobHandler{}
-	//	job.IsStart = true
-	//	if job.Browser.Init() {
-	//		job.Run(0)
-	//		job.Run(2)
-	//		job.Run(1)
-	//	}
-	//}()
-
-	//}else if MYSQL.CountWorkingTasks() > 0 {
-	//	config := MYSQL.GetConfig()
-	//	extra := config.GetExtra()
-	//	if extra.CountStreams > 0 {
-	//		STREAMS.StartLoop(extra.CountStreams, extra.LimitStreams, extra.CmdStreams)
-	//	}
-	//}
+		//time.Sleep(100)
+		//
+		//go func() {
+		//	job := JobHandler{}
+		//	job.IsStart = true
+		//	if job.Browser.Init() {
+		//		job.Run(1)
+		//		job.Run(0)
+		//		job.Run(2)
+		//	}
+		//}()
+		//
+		//time.Sleep(100)
+		//
+		//go func() {
+		//	job := JobHandler{}
+		//	job.IsStart = true
+		//	if job.Browser.Init() {
+		//		job.Run(0)
+		//		job.Run(2)
+		//		job.Run(1)
+		//	}
+		//}()
+	}else if MYSQL.CountWorkingTasks() > 0 {
+		conf := MYSQL.GetConfig()
+		extra := conf.GetExtra()
+		if extra.CountStreams > 0 {
+			STREAMS.StartLoop(extra.CountStreams, extra.LimitStreams, extra.CmdStreams)
+		}
+	}
 
 	routes := Routes{}
 	routes.Run()
 
 	time.Sleep(time.Minute)
-}
-
-func TestScreen() {
-
-	host := "89.191.225.148"
-	port := "45785"
-	login := "phillip"
-	password := "I2n9BeJ"
-
-	proxy := &Proxy{
-		Id:       1,
-		Host:     host,
-		Port:     port,
-		Login:    login,
-		Password: password,
-		LocalIp:  host + ":" + port,
-	}
-	browser := Browser{}
-	browser.Proxy = proxy
-	browser.Init()
-
-	ctx, cancel := context.WithTimeout(browser.ctx, time.Second * 15)
-	browser.ctx = ctx
-	defer cancel()
-
-	status, buffer := browser.ScreenShot("https://www.google.com/search?hl=en&gl=us&q=what+is+my+ip")
-	if !status {
-		log.Fatal(string(buffer))
-	}
-
-	if len(buffer) > 0 {
-		fmt.Println("dadsa")
-	}
 }

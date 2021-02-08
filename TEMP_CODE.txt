@@ -3,3 +3,46 @@ for _, proxy := range proxies {
     agent := MYSQL.GetAgent()
     MYSQL.UpdateProxy(map[string]interface{}{"agent":agent.Sign.String}, int(proxy.Id.Int64))
 }
+
+if j.CheckCaptcha(searchHtml) {
+    task.SetLog("Есть каптча для " + j.Browser.Proxy.LocalIp + "...")
+    //j.proxy.SetTimeout(parser, 500)
+    //j.proxy.LocalIp = ""
+    //j.Cancel()
+    //continue
+    //key, _ := j.AntiCaptcha(googleUrl, searchHtml)
+    key := ""
+    if key != "" {
+        task.SetLog("Anticaptcha: " + key)
+        if err := chromedp.Run(j.Browser.ctx,
+            j.Browser.runWithTimeOut(300, false, chromedp.Tasks{
+                chromedp.WaitVisible("captcha-form", chromedp.ByID),
+                chromedp.WaitVisible("g-recaptcha-response", chromedp.ByID),
+                chromedp.SetValue(`g-recaptcha-response`, key, chromedp.ByID),
+                chromedp.Submit(`captcha-form`, chromedp.ByID),
+                chromedp.Sleep(time.Second*5),
+                chromedp.WaitReady("body", chromedp.ByQuery),
+                chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
+            }),
+        ); err != nil {
+            log.Println("JobHandler.Run.2.HasError", err)
+            task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
+            continue
+        }
+        if searchHtml != "" {
+            f, err := os.Create("/var/www/example.txt")
+            if err != nil {
+                fmt.Println(err)
+            }
+            d2 := []byte(searchHtml)
+            n2, err := f.Write(d2)
+            if err != nil {
+                fmt.Println("JobHandler.Run.3", n2, err)
+                _ = f.Close()
+            }
+        }
+    } else {
+        task.SetLog("Антикаптча не сработала для " + j.Browser.Proxy.LocalIp + "...")
+        return false, "Каптча"
+    }
+}

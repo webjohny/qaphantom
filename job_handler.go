@@ -9,7 +9,6 @@ import (
 	"math"
 	"math/rand"
 	"net/url"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -38,8 +37,6 @@ type JobHandler struct {
 	Browser Browser
 	ctx context.Context
 	isFinished chan bool
-
-	CancelTimeout context.CancelFunc
 }
 
 type QaSetting struct {
@@ -170,7 +167,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	j.config = MYSQL.GetConfig()
 
 	for i := 1; i < 2; i++ {
-
 		if j.CheckFinished() {
 			task.SetLog("Задача завершилась преждевременно из-за таймаута")
 			return false, "Timeout"
@@ -184,69 +180,25 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			if err := chromedp.Run(j.Browser.ctx,
 				// Устанавливаем страницу для парсинга
 				//chromedp.Sleep(time.Second * 60),
-				chromedp.Navigate(googleUrl),
-				chromedp.Sleep(time.Second*time.Duration(rand.Intn(10))),
-				chromedp.WaitReady("body", chromedp.ByQuery),
-				// Вытащить html на проверку каптчи
-				chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
+				j.Browser.runWithTimeOut(20, false, chromedp.Tasks{
+					chromedp.Navigate(googleUrl),
+					chromedp.Sleep(time.Second*time.Duration(rand.Intn(10))),
+					chromedp.WaitVisible("body", chromedp.ByQuery),
+					// Вытащить html на проверку каптчи
+					chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
+				}),
 			); err != nil {
 				log.Println("JobHandler.Run.HasError", err)
 				task.FreeTask()
 				return false, "Not found page"
-			} else {
-				if j.CheckCaptcha(searchHtml) {
-					task.SetLog("Есть каптча для " + j.Browser.Proxy.LocalIp + "...")
-					//j.proxy.SetTimeout(parser, 500)
-					//j.proxy.LocalIp = ""
-					//j.Cancel()
-					//continue
-					//key, _ := j.AntiCaptcha(googleUrl, searchHtml)
-					key := ""
-					if key != "" {
-						task.SetLog("Anticaptcha: " + key)
-						if err := chromedp.Run(j.Browser.ctx,
-							j.Browser.runWithTimeOut(300, false, chromedp.Tasks{
-								chromedp.WaitVisible("captcha-form", chromedp.ByID),
-								chromedp.WaitVisible("g-recaptcha-response", chromedp.ByID),
-								chromedp.SetValue(`g-recaptcha-response`, key, chromedp.ByID),
-								chromedp.Submit(`captcha-form`, chromedp.ByID),
-								chromedp.Sleep(time.Second*5),
-								chromedp.WaitReady("body", chromedp.ByQuery),
-								chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
-							}),
-						); err != nil {
-							log.Println("JobHandler.Run.2.HasError", err)
-							task.SetLog("Попытка №" + strconv.Itoa(i) + " провалилась. (" + err.Error() + ")")
-							continue
-						}
-						if searchHtml != "" {
-							f, err := os.Create("/var/www/example.txt")
-							if err != nil {
-								fmt.Println(err)
-							}
-							d2 := []byte(searchHtml)
-							n2, err := f.Write(d2)
-							if err != nil {
-								fmt.Println("JobHandler.Run.3", n2, err)
-								_ = f.Close()
-							}
-						}
-					} else {
-						task.SetLog("Антикаптча не сработала для " + j.Browser.Proxy.LocalIp + "...")
-						return false, "Каптча"
-					}
-				}
-
-				if !j.CheckPaa(searchHtml) {
-					task.SetError("Отсутствует PAA.")
-					go j.Cancel()
-					return false, "Отсутствует PAA."
-				}
-				break
+			} else if !j.CheckPaa(searchHtml) {
+				task.SetError("Отсутствует PAA.")
+				j.Cancel()
+				return false, "Отсутствует PAA."
 			}
 		}else{
 			task.FreeTask()
-			go j.Cancel()
+			j.Cancel()
 			return false, "Context undefined"
 		}
 	}
@@ -610,6 +562,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			return false, "Timeout"
 		}
 
+
+		//https://www.google.com/search?q=what+is+ip&newwindow=1&tbm=vid&sxsrf=ALeKk03aEjIAjP8uOV6Vfd2yt_kvttgYyA:1612806276529&source=lnt&tbs=srcf:H4sIAAAAAAAAACWMQQrAIAwEf9NLwT_1FuESpRjDJwd-32MvCDMPee4ZHRuI5rhzWFPaNtYJ13FNJialg7DSXXOgQUveKATuFg6vTEvh_1gh5CXPTQC5DNmY1gAAAA&sa=X&ved=0ahUKEwjNr9DJ69ruAhVnx4sKHVzXBrUQpwUIJQ&biw=1600&bih=757&dpr=1
 		// Парсим видео
 		var videosHtml string
 		if j.Browser.ctx != nil {
@@ -618,8 +572,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 					chromedp.Sleep(time.Second * time.Duration(rand.Intn(10))),
 					// Устанавливаем страницу для парсинга
 					chromedp.Navigate("https://www.youtube.com/results?search_query=" + task.Keyword),
-					// Вытащить html со списком
-					chromedp.Sleep(time.Second * 4),
+					chromedp.WaitVisible("body",chromedp.ByQuery),
 					chromedp.OuterHTML("body", &videosHtml, chromedp.ByQuery),
 				}),
 			); err != nil {
@@ -1194,10 +1147,6 @@ func (j *JobHandler) CheckPaa(html string) bool {
 	return strings.Contains(html,"JolIg") && strings.Contains(html,"related-question-pair")
 }
 
-func (j *JobHandler) CheckCaptcha(html string) bool {
-	return strings.Contains(html,"g-recaptcha") && strings.Contains(html,"data-sitekey")
-}
-
 func (j *JobHandler) CheckFinished() bool {
 	select {
 	case <-j.isFinished:
@@ -1240,17 +1189,11 @@ func (j *JobHandler) AntiCaptcha(url string, html string) (string, error) {
 }
 
 func (j *JobHandler) Cancel() {
-	if j.CancelTimeout != nil {
-		j.CancelTimeout()
-	}
 	if CONF.Env != "local" {
 		j.isFinished <- true
 	}
 }
 
 func (j *JobHandler) Reload() {
-	if j.CancelTimeout != nil {
-		j.CancelTimeout()
-	}
 	j.Browser.Reload()
 }

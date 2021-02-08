@@ -12,6 +12,7 @@ import (
 	"github.com/chromedp/cdproto/security"
 	"github.com/webjohny/chromedp"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -114,17 +115,21 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 	taskCtx, cancelTask := chromedp.NewContext(allocCtx)
 
 	var searchHtml string
+	var videosHtml string
 
 	b.cancelTask = cancelTask
-
+fmt.Println(UTILS.ArrayRand(keyWords))
 	if err := chromedp.Run(taskCtx,
 		b.setProxyToContext(proxy),
-		b.runWithTimeOut(10, false, chromedp.Tasks{
-			chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
-			chromedp.Sleep(2 * time.Second),
-			chromedp.WaitVisible("body", chromedp.ByQuery),
-			// Вытащить html на проверку каптчи
-			chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
+		b.runWithTimeOut(10, true, chromedp.Tasks{
+			//chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
+			//chromedp.WaitVisible("body", chromedp.ByQuery),
+			//// Вытащить html на проверку каптчи
+			//chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
+			// Устанавливаем страницу для парсинга
+			chromedp.Navigate("https://www.youtube.com/results?search_query=whats+my+ip"),
+			chromedp.WaitVisible("body",chromedp.ByQuery),
+			chromedp.OuterHTML("body", &videosHtml, chromedp.ByQuery),
 		}),
 	); err != nil {
 		log.Println("Browser.checkProxy.HasError", err)
@@ -132,6 +137,9 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 	}
 
 	if searchHtml != "" {
+		if b.CheckCaptcha(searchHtml) {
+			return false
+		}
 		b.ctx = taskCtx
 		return true
 	}
@@ -139,6 +147,10 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 	return false
 }
 
+
+func (b *Browser) CheckCaptcha(html string) bool {
+	return strings.Contains(html,"g-recaptcha") && strings.Contains(html,"data-sitekey")
+}
 
 func (b *Browser) setProxyToContext(proxy *Proxy) chromedp.Tasks {
 	fmt.Print(proxy.Login, proxy.Password)
@@ -179,15 +191,25 @@ func (b *Browser) runWithTimeOut(timeout time.Duration, isStrict bool, tasks chr
 		var check bool
 		time.AfterFunc(timeout * time.Second, func(){
 			if !check {
-				b.cancelTask()
+				if isStrict {
+					b.cancelTask()
+				} else {
+					err := chromedp.Navigate("https://google.com/").Do(ctx)
+					if err != nil {
+						fmt.Println("ERR.Browser.runWithTimeOut", err)
+						b.cancelTask()
+					}
+				}
 			}
 		})
 
 		err := tasks.Do(ctx)
 		if err != nil {
-			fmt.Println("ERR.Browser.runWithTimeOut", err)
-			b.cancelTask()
-			return err
+			if "page load error net::ERR_ABORTED" != err.Error() {
+				fmt.Println("ERR.Browser.runWithTimeOut", err)
+				b.cancelTask()
+				return err
+			}
 		}
 		if !isStrict {
 			check = true

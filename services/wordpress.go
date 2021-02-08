@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"net/http"
 	"path"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -52,6 +53,10 @@ type WpImage struct {
 	UrlMedium string
 }
 
+
+func isNil(i interface{}) bool {
+	return i == nil || reflect.ValueOf(i).IsNil()
+}
 
 func randStringRunes(n int) string {
 	letterRunes := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -125,16 +130,26 @@ func (w *Wordpress) PreparePost(post map[string]interface{}) WpPost {
 		}
 	}
 	id, _ := strconv.Atoi(post["post_id"].(string))
-	return WpPost{
+
+	wpPost := WpPost{
 		Id: id,
-		Link: post["link"].(string),
-		Title: post["post_title"].(string),
-		Content: post["post_content"].(string),
 		Date: post["post_date"].(time.Time),
-		Slug: post["post_name"].(string),
 		Parent: parent,
 		Terms: cats,
 	}
+	if !isNil(post["post_content"]){
+		wpPost.Content = post["post_content"].(string)
+	}
+	if !isNil(post["post_content"]){
+		wpPost.Title = post["post_title"].(string)
+	}
+	if !isNil(post["post_name"]){
+		wpPost.Slug = post["post_name"].(string)
+	}
+	if !isNil(post["link"]){
+		wpPost.Link = post["link"].(string)
+	}
+	return wpPost
 }
 
 func (w *Wordpress) GetCats() []WpCat {

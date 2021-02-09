@@ -563,7 +563,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		}
 
 
-		//https://www.google.com/search?q=what+is+ip&newwindow=1&tbm=vid&sxsrf=ALeKk03aEjIAjP8uOV6Vfd2yt_kvttgYyA:1612806276529&source=lnt&tbs=srcf:H4sIAAAAAAAAACWMQQrAIAwEf9NLwT_1FuESpRjDJwd-32MvCDMPee4ZHRuI5rhzWFPaNtYJ13FNJialg7DSXXOgQUveKATuFg6vTEvh_1gh5CXPTQC5DNmY1gAAAA&sa=X&ved=0ahUKEwjNr9DJ69ruAhVnx4sKHVzXBrUQpwUIJQ&biw=1600&bih=757&dpr=1
 		// Парсим видео
 		var videosHtml string
 		if j.Browser.ctx != nil {
@@ -571,9 +570,9 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				j.Browser.runWithTimeOut(30, false, chromedp.Tasks{
 					chromedp.Sleep(time.Second * time.Duration(rand.Intn(10))),
 					// Устанавливаем страницу для парсинга
-					chromedp.Navigate("https://www.youtube.com/results?search_query=" + task.Keyword),
-					chromedp.WaitVisible("body",chromedp.ByQuery),
-					chromedp.OuterHTML("body", &videosHtml, chromedp.ByQuery),
+					chromedp.Navigate("https://www.google.com/search?source=lnms&tbm=vid&as_sitesearch=youtube.com&as_qdr=y&num=50&q=" + task.Keyword),
+					chromedp.WaitVisible("#rso",chromedp.ByQuery),
+					chromedp.OuterHTML("#rso", &videosHtml, chromedp.ByQuery),
 				}),
 			); err != nil {
 				log.Println("JobHandler.Run.7.HasError", err)
@@ -595,6 +594,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		var lastVideo string
 
 		if videosHtml != "" {
+			videosHtml = "<div>" + videosHtml + "</div>"
 			videoReader := strings.NewReader(videosHtml)
 			doc, err := goquery.NewDocumentFromReader(videoReader)
 			if err != nil {
@@ -603,7 +603,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			}
 
 			// Начинаем перебор блоков с видео
-			doc.Find("#contents.ytd-section-list-renderer").Find("a.ytd-thumbnail").Each(func(i int, s *goquery.Selection) {
+			doc.Find("#rso").Find("a.IHSDrd").Each(func(i int, s *goquery.Selection) {
 				if len(videos) != vCount {
 					link, _ := s.Attr("href")
 					videos = append(videos, UTILS.YoutubeEmbed(link))

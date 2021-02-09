@@ -21,12 +21,12 @@ type Browser struct {
 
 	BrowserContextID cdp.BrowserContextID
 
-	CancelBrowser context.CancelFunc
-	CancelLogger context.CancelFunc
-	cancelTask context.CancelFunc
-
 	Proxy *Proxy
+
 	ctx context.Context
+	allocCtx context.Context
+	taskCtx context.Context
+	cancelTask context.CancelFunc
 
 	isOpened bool
 	streamId int
@@ -112,29 +112,53 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 
 	// Запускаем контекст браузера
 	allocCtx, _ := chromedp.NewExecAllocator(context.Background(), options...)
-	taskCtx, cancelTask := chromedp.NewContext(allocCtx)
+	taskCtx, _ := chromedp.NewContext(allocCtx)
+
+	if err := chromedp.Run(taskCtx); err != nil {
+		log.Println("start:", err)
+	}
+
+	ctx1, cancelTask := context.WithCancel(taskCtx)
 
 	var searchHtml string
 	var videosHtml string
 
+	b.taskCtx = taskCtx
 	b.cancelTask = cancelTask
+
 fmt.Println(UTILS.ArrayRand(keyWords))
-	if err := chromedp.Run(taskCtx,
+	if err := chromedp.Run(ctx1,
 		b.setProxyToContext(proxy),
-		b.runWithTimeOut(10, true, chromedp.Tasks{
+		b.runWithTimeOut(10, false, chromedp.Tasks{
 			//chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
 			//chromedp.WaitVisible("body", chromedp.ByQuery),
 			//// Вытащить html на проверку каптчи
 			//chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
 			// Устанавливаем страницу для парсинга
-			chromedp.Navigate("https://www.youtube.com/results?search_query=whats+my+ip"),
-			chromedp.WaitVisible("body",chromedp.ByQuery),
-			chromedp.OuterHTML("body", &videosHtml, chromedp.ByQuery),
+			chromedp.Navigate("https://www.google.com/search?source=lnms&tbm=vid&as_sitesearch=youtube.com&as_qdr=y&num=50&q=whats+my+ip"),
+			chromedp.WaitVisible("#rso",chromedp.ByQuery),
+			chromedp.OuterHTML("#rso", &videosHtml, chromedp.ByQuery),
+			chromedp.Sleep(2222 * time.Second),
+		}),
+		b.runWithTimeOut(10, false, chromedp.Tasks{
+			//chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
+			//chromedp.WaitVisible("body", chromedp.ByQuery),
+			//// Вытащить html на проверку каптчи
+			//chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
+			// Устанавливаем страницу для парсинга
+			chromedp.Navigate("https://www.google.com/search?source=lnms&tbm=vid&as_sitesearch=youtube.com&as_qdr=y&num=50&q=whats+my+ip"),
+			chromedp.WaitVisible("#rso",chromedp.ByQuery),
+			chromedp.OuterHTML("#rso", &videosHtml, chromedp.ByQuery),
+			chromedp.Sleep(2222 * time.Second),
 		}),
 	); err != nil {
 		log.Println("Browser.checkProxy.HasError", err)
 		return false
 	}
+
+	fmt.Println("HELLO")
+
+	return false
 
 	if searchHtml != "" {
 		if b.CheckCaptcha(searchHtml) {
@@ -194,11 +218,23 @@ func (b *Browser) runWithTimeOut(timeout time.Duration, isStrict bool, tasks chr
 				if isStrict {
 					b.cancelTask()
 				} else {
-					err := chromedp.Navigate("https://google.com/").Do(ctx)
-					if err != nil {
+					ctx2, _ := chromedp.NewContext(b.taskCtx)
+					if err := chromedp.Run(ctx2,
+						chromedp.Navigate("https://google.com"),
+					); err != nil {
 						fmt.Println("ERR.Browser.runWithTimeOut", err)
+					}else {
+						b.ctx = ctx
 						b.cancelTask()
+						//b.cancelTask = cancelTask
 					}
+					//err := chromedp.Tasks{
+					//	chromedp.Stop(),
+					//	chromedp.Navigate("https://google.com"),
+					//}.Do(ctx)
+					//if err != nil {
+					//	fmt.Println("ERR.Browser.runWithTimeOut", err)
+					//}
 				}
 			}
 		})
@@ -210,6 +246,7 @@ func (b *Browser) runWithTimeOut(timeout time.Duration, isStrict bool, tasks chr
 				b.cancelTask()
 				return err
 			}
+			fmt.Println(err)
 		}
 		if !isStrict {
 			check = true

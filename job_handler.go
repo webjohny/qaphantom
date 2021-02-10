@@ -1195,5 +1195,5 @@ func (j *JobHandler) Cancel() {
 }
 
 func (j *JobHandler) Reload() {
-	j.Browser.Reload()
+	j.Browser.Reload(true)
 }

@@ -33,6 +33,31 @@ type Browser struct {
 	limit int64
 }
 
+func (b *Browser) Open(proxy *Proxy) (bool, context.Context, context.CancelFunc) {
+	options := b.setOpts(proxy)
+	if CONF.Env == "local" {
+		options = append(options, chromedp.Flag("headless", false))
+	}
+
+	// Запускаем контекст браузера
+	allocCtx, _ := chromedp.NewExecAllocator(context.Background(), options...)
+	taskCtx, cancelTask := chromedp.NewContext(allocCtx)
+
+	var task chromedp.Action
+	if proxy != nil {
+		task = b.setProxyToContext(proxy)
+	}
+
+	if err := chromedp.Run(taskCtx,
+		task,
+	); err != nil {
+		log.Println("Browser.checkProxy.HasError", err)
+		return false, nil, nil
+	}
+
+	return true, taskCtx, cancelTask
+}
+
 func (b *Browser) Init() bool {
 	if b.isOpened {
 		return true
@@ -43,132 +68,35 @@ func (b *Browser) Init() bool {
 	}
 
 	if b.Proxy == nil || b.Proxy.Host == "" {
-		b.Proxy = &Proxy{}
+		proxy := &Proxy{}
 		// Подключаемся к прокси
-		if !b.Proxy.newProxy(){
+		if !proxy.newProxy(){
 			return false
 		}
 
-		if !b.checkProxy(b.Proxy) {
+		if !b.checkProxy(proxy) {
 			return false
 		}
 
 		//@todo Commented
-		b.Proxy.setTimeout(b.streamId, 5)
-	}
-
-	options := b.setOpts(b.Proxy)
-
-
-	if CONF.Env == "local" {
-		options = append(options, chromedp.Flag("headless", false))
+		proxy.setTimeout(b.streamId, 5)
+		b.Proxy = proxy
 	}
 
 	if b.ctx == nil {
-		fmt.Println("NEW INSTANCE")
-		// Запускаем контекст браузера
-		allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), options...)
-
-		// Устанавливаем собственный logger
-		//, chromedp.WithDebugf(log.Printf)
-		taskCtx, cancel := chromedp.NewContext(allocCtx)
-		b.cancelTask = cancel
-
-		if err := chromedp.Run(taskCtx,
-			chromedp.Sleep(time.Second),
-			b.setProxyToContext(b.Proxy),
-		); err != nil {
-			log.Println("Browser.Init.HasError", err)
+		check, ctx, cancel := b.Open(b.Proxy)
+		if !check {
 			return false
 		}
-		b.ctx = taskCtx
+		fmt.Println("NEW INSTANCE")
+		b.ctx = ctx
+		b.cancelTask = cancel
 	}
 
 	fmt.Println("RETURN TRUE")
 
 	b.isOpened = true
 	return true
-}
-
-func (b *Browser) checkProxy(proxy *Proxy) bool {
-	if proxy == nil {
-		return false
-	}
-
-	options := b.setOpts(proxy)
-	if CONF.Env == "local" {
-		options = append(options, chromedp.Flag("headless", false))
-	}
-
-	keyWords := []string{
-		"whats+my+ip",
-		"ssh+run+command",
-		"how+work+with+git",
-		"bitcoin+price+2013+year",
-		"онлайн+обменник+крипта+рубль",
-		"где+купить+акции",
-		"i+want+to+spend+crypto",
-	}
-
-	// Запускаем контекст браузера
-	allocCtx, _ := chromedp.NewExecAllocator(context.Background(), options...)
-	taskCtx, _ := chromedp.NewContext(allocCtx)
-
-	if err := chromedp.Run(taskCtx); err != nil {
-		log.Println("start:", err)
-	}
-
-	ctx1, cancelTask := context.WithCancel(taskCtx)
-
-	var searchHtml string
-	var videosHtml string
-
-	b.taskCtx = taskCtx
-	b.cancelTask = cancelTask
-
-fmt.Println(UTILS.ArrayRand(keyWords))
-	if err := chromedp.Run(ctx1,
-		b.setProxyToContext(proxy),
-		b.runWithTimeOut(10, false, chromedp.Tasks{
-			//chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
-			//chromedp.WaitVisible("body", chromedp.ByQuery),
-			//// Вытащить html на проверку каптчи
-			//chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
-			// Устанавливаем страницу для парсинга
-			chromedp.Navigate("https://www.google.com/search?source=lnms&tbm=vid&as_sitesearch=youtube.com&as_qdr=y&num=50&q=whats+my+ip"),
-			chromedp.WaitVisible("#rso",chromedp.ByQuery),
-			chromedp.OuterHTML("#rso", &videosHtml, chromedp.ByQuery),
-			chromedp.Sleep(2222 * time.Second),
-		}),
-		b.runWithTimeOut(10, false, chromedp.Tasks{
-			//chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
-			//chromedp.WaitVisible("body", chromedp.ByQuery),
-			//// Вытащить html на проверку каптчи
-			//chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
-			// Устанавливаем страницу для парсинга
-			chromedp.Navigate("https://www.google.com/search?source=lnms&tbm=vid&as_sitesearch=youtube.com&as_qdr=y&num=50&q=whats+my+ip"),
-			chromedp.WaitVisible("#rso",chromedp.ByQuery),
-			chromedp.OuterHTML("#rso", &videosHtml, chromedp.ByQuery),
-			chromedp.Sleep(2222 * time.Second),
-		}),
-	); err != nil {
-		log.Println("Browser.checkProxy.HasError", err)
-		return false
-	}
-
-	fmt.Println("HELLO")
-
-	return false
-
-	if searchHtml != "" {
-		if b.CheckCaptcha(searchHtml) {
-			return false
-		}
-		b.ctx = taskCtx
-		return true
-	}
-
-	return false
 }
 
 
@@ -218,23 +146,7 @@ func (b *Browser) runWithTimeOut(timeout time.Duration, isStrict bool, tasks chr
 				if isStrict {
 					b.cancelTask()
 				} else {
-					ctx2, _ := chromedp.NewContext(b.taskCtx)
-					if err := chromedp.Run(ctx2,
-						chromedp.Navigate("https://google.com"),
-					); err != nil {
-						fmt.Println("ERR.Browser.runWithTimeOut", err)
-					}else {
-						b.ctx = ctx
-						b.cancelTask()
-						//b.cancelTask = cancelTask
-					}
-					//err := chromedp.Tasks{
-					//	chromedp.Stop(),
-					//	chromedp.Navigate("https://google.com"),
-					//}.Do(ctx)
-					//if err != nil {
-					//	fmt.Println("ERR.Browser.runWithTimeOut", err)
-					//}
+					b.Reload(true)
 				}
 			}
 		})
@@ -267,8 +179,15 @@ func (b *Browser) Cancel() {
 	b.isOpened = false
 }
 
-func (b *Browser) Reload() bool {
-	b.Cancel()
+func (b *Browser) Reload(hasProxy bool) bool {
+	if hasProxy  {
+		if b.cancelTask != nil {
+			b.cancelTask()
+		}
+		b.isOpened = false
+	} else {
+		b.Cancel()
+	}
 	return b.Init()
 }
 

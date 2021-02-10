@@ -38,7 +38,7 @@ func (s *Stream) StartTaskTimer(streamId int, limit int64) {
 		s.browser.limit = limit
 		for {
 			if s.browser.ctx == nil {
-				s.browser.Reload()
+				s.browser.Reload(false)
 				time.Sleep(time.Minute * 5)
 			}else{
 				break

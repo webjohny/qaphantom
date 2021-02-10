@@ -188,11 +188,10 @@ func (b *Browser) Reload(hasProxy bool) bool {
 	} else {
 		b.Cancel()
 	}
-	return b.Init()
-}
+	if b.Proxy != nil {
 
-func (b *Browser) ChangeTab() {
-
+		return true
+	}
 }
 
 func (b *Browser) ScreenShot(url string) (bool, []byte) {
@@ -234,4 +233,71 @@ func (b *Browser) ScreenShot(url string) (bool, []byte) {
 	}
 
 	return true, buf
+}
+
+func CheckProxy(proxy *Proxy) *Browser {
+	browser := &Browser{}
+
+	check, ctx, cancel := browser.Open(proxy)
+	if !check {
+		return nil
+	}
+
+	keyWords := []string{
+		"whats+my+ip",
+		"ssh+run+command",
+		"how+work+with+git",
+		"bitcoin+price+2013+year",
+		"онлайн+обменник+крипта+рубль",
+		"где+купить+акции",
+		"i+want+to+spend+crypto",
+	}
+
+	// Запускаем контекст браузера
+	var searchHtml string
+	var videosHtml string
+
+	browser.cancelTask = cancel
+
+	if err := chromedp.Run(ctx,
+		browser.runWithTimeOut(10, false, chromedp.Tasks{
+			//chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
+			//chromedp.WaitVisible("body", chromedp.ByQuery),
+			//// Вытащить html на проверку каптчи
+			//chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
+			// Устанавливаем страницу для парсинга
+			chromedp.Navigate("https://www.google.com/search?source=lnms&tbm=vid&as_sitesearch=youtube.com&num=50&q=" + UTILS.ArrayRand(keyWords)),
+			chromedp.WaitVisible("#rso",chromedp.ByQuery),
+			chromedp.OuterHTML("#rso", &videosHtml, chromedp.ByQuery),
+			chromedp.Sleep(2222 * time.Second),
+		}),
+	); err != nil {
+		log.Println("Browser.checkProxy.HasError", err)
+	}
+
+	if searchHtml != "" && !browser.CheckCaptcha(searchHtml) {
+		browser.ctx = ctx
+		browser.Proxy = proxy
+		return browser
+	}
+	browser.Cancel()
+	return nil
+}
+
+func NewBrowserWithProxy(streamId int, limit int) *Browser {
+	if limit < 1 {
+		limit = 60
+	}
+	// Подключаемся к прокси
+	proxy := NewProxy()
+
+	browser := CheckProxy(proxy)
+	browser.streamId = streamId
+
+	if browser != nil {
+		//@todo Commented
+		proxy.setTimeout(streamId, 5)
+		browser.isOpened = true
+	}
+	return browser
 }

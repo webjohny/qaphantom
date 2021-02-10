@@ -28,7 +28,7 @@ func main() {
 		go func() {
 			job := JobHandler{}
 			job.IsStart = true
-			if job.Browser.Init() {
+			if job.Init() {
 				job.Run(0)
 				job.Run(1)
 				//job.Run(1)

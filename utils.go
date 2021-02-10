@@ -116,7 +116,11 @@ func (u *Utils) YoutubeEmbed(str string) string {
 		str = strings.Replace(str, "/watch?v=", "youtube.com/embed/", 1)
 	}
 	str = strings.Replace(str, "&", "?", 1)
-	return `https://` + str
+	if !strings.Contains(str, "https") {
+		return `https://` + str
+	}
+	return str
+
 }
 
 

@@ -22,20 +22,21 @@ type Proxy struct {
 	Log []string
 }
 
-func (p *Proxy) newProxy() bool {
+func NewProxy() *Proxy {
 	proxy := MYSQL.GetFreeProxy()
 	if proxy.Id.Valid {
-		p.Id = int(proxy.Id.Int64)
-		p.Host = proxy.Host.String
-		p.Port = proxy.Port.String
-		p.Login = proxy.Login.String
-		p.Password = proxy.Password.String
-		p.Agent = proxy.Agent.String
-		p.LocalIp = p.Host + ":" + p.Port
+		instance := &Proxy{}
+		instance.Id = int(proxy.Id.Int64)
+		instance.Host = proxy.Host.String
+		instance.Port = proxy.Port.String
+		instance.Login = proxy.Login.String
+		instance.Password = proxy.Password.String
+		instance.Agent = proxy.Agent.String
+		instance.LocalIp = instance.Host + ":" + instance.Port
 
-		return true
+		return instance
 	}
-	return false
+	return nil
 }
 
 func (p *Proxy) setTimeout(parser int, minutes int) sql.Result {

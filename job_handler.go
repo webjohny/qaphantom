@@ -182,7 +182,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				//chromedp.Sleep(time.Second * 60),
 				j.Browser.runWithTimeOut(20, false, chromedp.Tasks{
 					chromedp.Navigate(googleUrl),
-					chromedp.Sleep(time.Second*time.Duration(rand.Intn(10))),
+					chromedp.Sleep(time.Second*time.Duration(rand.Intn(5))),
 					chromedp.WaitVisible("body", chromedp.ByQuery),
 					// Вытащить html на проверку каптчи
 					chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
@@ -567,7 +567,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		if j.Browser.ctx != nil {
 			if err := chromedp.Run(j.Browser.ctx,
 				j.Browser.runWithTimeOut(30, false, chromedp.Tasks{
-					chromedp.Sleep(time.Second * time.Duration(rand.Intn(10))),
+					chromedp.Sleep(time.Second * time.Duration(rand.Intn(5))),
 					// Устанавливаем страницу для парсинга
 					//chromedp.Navigate("https://deelay.me/23545/google.com"),
 					chromedp.Navigate("https://www.google.com/search?source=lnms&tbm=vid&as_sitesearch=youtube.com&as_qdr=y&num=50&q=" + task.Keyword),

@@ -82,7 +82,7 @@ func (s *Streams) StartStreams(count int, limit int, cmd string) {
 func (s *Streams) ReStartStreams(count int, limit int, cmd string) {
 	fmt.Println("Restarted streams")
 	STREAMS.StopAllWithoutClean()
-	time.Sleep(time.Second * 600)
+	time.Sleep(time.Second * 100)
 	s.StartStreams(count, limit, cmd)
 }
 
@@ -94,10 +94,10 @@ func (s *Streams) StartLoop(count int, limit int, cmd string) {
 	restartFunc = func() {
 		if STREAMS.isStarted {
 			s.ReStartStreams(count, limit, cmd)
-			time.AfterFunc(time.Second * 2400, restartFunc)
+			time.AfterFunc(time.Second * 3000, restartFunc)
 		}
 	}
-	time.AfterFunc(time.Second * 2400, restartFunc)
+	time.AfterFunc(time.Second * 3000, restartFunc)
 
 	STREAMS.isStarted = true
 	go s.StartStreams(count, limit, cmd)
@@ -112,7 +112,7 @@ func (s *Stream) Start(streamId int, limit int64) {
 		for {
 			if !s.browser.Init() {
 				s.browser.Cancel()
-				time.Sleep(time.Minute * 5)
+				time.Sleep(time.Minute * 3)
 			}else{
 				break
 			}

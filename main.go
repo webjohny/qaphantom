@@ -30,13 +30,13 @@ func main() {
 			job.IsStart = true
 			if job.Browser.Init() {
 				job.Run(0)
-				//job.Run(1)
+				job.Run(1)
 				//job.Run(1)
 			}
 		}()
 
-		//time.Sleep(100)
-		//
+		time.Sleep(100)
+
 		//go func() {
 		//	job := JobHandler{}
 		//	job.IsStart = true

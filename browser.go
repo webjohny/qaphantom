@@ -21,8 +21,7 @@ type Browser struct {
 
 	BrowserContextID cdp.BrowserContextID
 
-	CancelBrowser context.CancelFunc
-	CancelLogger context.CancelFunc
+	cancelBrowser context.CancelFunc
 	cancelTask context.CancelFunc
 
 	Proxy *Proxy
@@ -43,6 +42,7 @@ func (b *Browser) Init() bool {
 	}
 
 	if b.Proxy == nil || b.Proxy.Host == "" {
+		fmt.Println("CHECK PROXY")
 		b.Proxy = &Proxy{}
 		// Подключаемся к прокси
 		if !b.Proxy.newProxy(){
@@ -57,22 +57,23 @@ func (b *Browser) Init() bool {
 		b.Proxy.setTimeout(b.streamId, 5)
 	}
 
-	options := b.setOpts(b.Proxy)
-
-
-	if CONF.Env == "local" {
-		options = append(options, chromedp.Flag("headless", false))
-	}
-
 	if b.ctx == nil {
 		fmt.Println("NEW INSTANCE")
+
+		options := b.setOpts(b.Proxy)
+
+		if CONF.Env == "local" {
+			options = append(options, chromedp.Flag("headless", false))
+		}
 		// Запускаем контекст браузера
 		allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), options...)
+		b.cancelBrowser = cancel
 
 		// Устанавливаем собственный logger
 		//, chromedp.WithDebugf(log.Printf)
 		taskCtx, cancel := chromedp.NewContext(allocCtx)
 		b.cancelTask = cancel
+		b.ctx = taskCtx
 
 		if err := chromedp.Run(taskCtx,
 			chromedp.Sleep(time.Second),
@@ -81,7 +82,6 @@ func (b *Browser) Init() bool {
 			log.Println("Browser.Init.HasError", err)
 			return false
 		}
-		b.ctx = taskCtx
 	}
 
 	fmt.Println("RETURN TRUE")
@@ -111,36 +111,31 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 	}
 
 	// Запускаем контекст браузера
-	allocCtx, _ := chromedp.NewExecAllocator(context.Background(), options...)
+	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), options...)
+	b.cancelBrowser = cancel
+
 	taskCtx, cancelTask := chromedp.NewContext(allocCtx)
+	b.cancelTask = cancelTask
+	b.ctx = taskCtx
 
 	var searchHtml string
-	var videosHtml string
 
-	b.cancelTask = cancelTask
-fmt.Println(UTILS.ArrayRand(keyWords))
+	fmt.Println(UTILS.ArrayRand(keyWords))
 	if err := chromedp.Run(taskCtx,
 		b.setProxyToContext(proxy),
 		b.runWithTimeOut(10, true, chromedp.Tasks{
-			//chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
-			//chromedp.WaitVisible("body", chromedp.ByQuery),
-			//// Вытащить html на проверку каптчи
-			//chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
 			// Устанавливаем страницу для парсинга
-			chromedp.Navigate("https://www.youtube.com/results?search_query=whats+my+ip"),
+			chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
+			//chromedp.Navigate("https://deelay.me/23545/google.com"),
 			chromedp.WaitVisible("body",chromedp.ByQuery),
-			chromedp.OuterHTML("body", &videosHtml, chromedp.ByQuery),
+			chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
 		}),
 	); err != nil {
 		log.Println("Browser.checkProxy.HasError", err)
 		return false
 	}
 
-	if searchHtml != "" {
-		if b.CheckCaptcha(searchHtml) {
-			return false
-		}
-		b.ctx = taskCtx
+	if searchHtml != "" && !b.CheckCaptcha(searchHtml) {
 		return true
 	}
 
@@ -194,11 +189,7 @@ func (b *Browser) runWithTimeOut(timeout time.Duration, isStrict bool, tasks chr
 				if isStrict {
 					b.cancelTask()
 				} else {
-					err := chromedp.Navigate("https://google.com/").Do(ctx)
-					if err != nil {
-						fmt.Println("ERR.Browser.runWithTimeOut", err)
-						b.cancelTask()
-					}
+					b.Reload()
 				}
 			}
 		})
@@ -206,14 +197,14 @@ func (b *Browser) runWithTimeOut(timeout time.Duration, isStrict bool, tasks chr
 		err := tasks.Do(ctx)
 		if err != nil {
 			if "page load error net::ERR_ABORTED" != err.Error() {
-				fmt.Println("ERR.Browser.runWithTimeOut", err)
+				fmt.Println("ERR.Browser.runWithTimeOut.1", err)
 				b.cancelTask()
 				return err
+			}else{
+				time.Sleep(2 * time.Second)
 			}
 		}
-		if !isStrict {
-			check = true
-		}
+		check = true
 		fmt.Println("RUN_WITH_TIMEOUT")
 		return nil
 	}
@@ -224,14 +215,18 @@ func (b *Browser) Cancel() {
 		b.cancelTask()
 	}
 
-	if b.Proxy.LocalIp != "" {
-		b.Proxy.freeProxy()
+	if b.isOpened {
+		if b.Proxy != nil && b.Proxy.LocalIp != "" {
+			b.Proxy.freeProxy()
+		}
+		b.isOpened = false
 	}
-	b.isOpened = false
+	b.ctx = nil
 }
 
 func (b *Browser) Reload() bool {
 	b.Cancel()
+	time.Sleep(time.Second)
 	return b.Init()
 }
 

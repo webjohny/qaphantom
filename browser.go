@@ -43,9 +43,9 @@ func (b *Browser) Init() bool {
 
 	if b.Proxy == nil || b.Proxy.Host == "" {
 		fmt.Println("CHECK PROXY")
-		b.Proxy = &Proxy{}
+		b.Proxy = NewProxy()
 		// Подключаемся к прокси
-		if !b.Proxy.newProxy(){
+		if b.Proxy == nil {
 			return false
 		}
 

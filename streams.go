@@ -38,7 +38,7 @@ func (s *Stream) StartTaskTimer(streamId int, limit int64) {
 		s.browser.limit = limit
 		for {
 			if s.browser.ctx == nil {
-				s.browser.Reload(false)
+				s.browser.Reload()
 				time.Sleep(time.Minute * 5)
 			}else{
 				break
@@ -82,7 +82,7 @@ func (s *Streams) StartStreams(count int, limit int, cmd string) {
 func (s *Streams) ReStartStreams(count int, limit int, cmd string) {
 	fmt.Println("Restarted streams")
 	STREAMS.StopAllWithoutClean()
-	time.Sleep(time.Second * 100)
+	time.Sleep(time.Second * 10)
 	s.StartStreams(count, limit, cmd)
 }
 
@@ -94,10 +94,10 @@ func (s *Streams) StartLoop(count int, limit int, cmd string) {
 	restartFunc = func() {
 		if STREAMS.isStarted {
 			s.ReStartStreams(count, limit, cmd)
-			time.AfterFunc(time.Second * 3000, restartFunc)
+			time.AfterFunc(time.Second * 1000, restartFunc)
 		}
 	}
-	time.AfterFunc(time.Second * 3000, restartFunc)
+	time.AfterFunc(time.Second * 1000, restartFunc)
 
 	STREAMS.isStarted = true
 	go s.StartStreams(count, limit, cmd)
@@ -112,7 +112,7 @@ func (s *Stream) Start(streamId int, limit int64) {
 		for {
 			if !s.browser.Init() {
 				s.browser.Cancel()
-				time.Sleep(time.Minute * 3)
+				time.Sleep(time.Minute)
 			}else{
 				break
 			}
@@ -186,6 +186,7 @@ func (s *Streams) StopAll() {
 		}
 		s.items = map[int]*Stream{}
 	}
+	s.StopAllCmd()
 }
 
 func (s *Streams) StopAllWithoutClean() {
@@ -194,6 +195,15 @@ func (s *Streams) StopAllWithoutClean() {
 		for _, stream := range s.items {
 			stream.Stop()
 		}
+	}
+	//kill -9 $(pgrep -f chromium)
+	s.StopAllCmd()
+}
+
+func (s *Streams) StopAllCmd() {
+	_, err := exec.CommandContext(context.TODO(), "bash", "-c", "kill -9 $(pgrep -f chromium)").Output()
+	if err != nil {
+		fmt.Println("StopAllWithoutClean", err)
 	}
 }
 

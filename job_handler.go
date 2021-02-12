@@ -148,6 +148,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		return false, "Исключён после 5 попыток парсинга"
 	}
 
+	j.Browser.Proxy.setTimeout(parser, 5)
 	task.SetLog("Подключаем прокси #" + strconv.Itoa(j.Browser.Proxy.Id) + " к браузеру (" + j.Browser.Proxy.LocalIp + ")")
 
 	task.SetTimeout(parser)
@@ -191,6 +192,10 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				log.Println("JobHandler.Run.HasError", err)
 				task.FreeTask()
 				return false, "Not found page"
+			} else if !j.Browser.CheckCaptcha(searchHtml) {
+				task.FreeTask()
+				j.Cancel()
+				return false, "Отсутствует PAA."
 			} else if !j.CheckPaa(searchHtml) {
 				task.SetError("Отсутствует PAA.")
 				j.Cancel()

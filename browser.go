@@ -53,7 +53,6 @@ func (b *Browser) Init() bool {
 			return false
 		}
 
-		//@todo Commented
 		b.Proxy.setTimeout(b.streamId, 5)
 	}
 

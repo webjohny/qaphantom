@@ -25,6 +25,9 @@ func main() {
 	// Run routes
 
 	if CONF.Env == "local" {
+		task := MYSQL.GetFreeTask(564805)
+		task.SetTimeout(2)
+
 		go func() {
 			job := JobHandler{}
 			job.IsStart = true

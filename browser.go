@@ -49,11 +49,11 @@ func (b *Browser) Init() bool {
 			return false
 		}
 
+		b.Proxy.setTimeout(b.streamId, 5)
+
 		if !b.checkProxy(b.Proxy) {
 			return false
 		}
-
-		b.Proxy.setTimeout(b.streamId, 5)
 	}
 
 	if b.ctx == nil {
@@ -94,6 +94,8 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 		return false
 	}
 
+	fmt.Println(proxy.LocalIp)
+
 	options := b.setOpts(proxy)
 	if CONF.Env == "local" {
 		options = append(options, chromedp.Flag("headless", false))
@@ -122,7 +124,7 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 	fmt.Println(UTILS.ArrayRand(keyWords))
 	if err := chromedp.Run(taskCtx,
 		b.setProxyToContext(proxy),
-		b.runWithTimeOut(10, true, chromedp.Tasks{
+		b.runWithTimeOut(10, false, chromedp.Tasks{
 			// Устанавливаем страницу для парсинга
 			chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
 			//chromedp.Navigate("https://deelay.me/23545/google.com"),

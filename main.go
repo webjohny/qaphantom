@@ -32,7 +32,7 @@ func main() {
 			job := JobHandler{}
 			job.IsStart = true
 			if job.Browser.Init() {
-				job.Run(0)
+				job.Run(2)
 				job.Run(1)
 				//job.Run(1)
 			}

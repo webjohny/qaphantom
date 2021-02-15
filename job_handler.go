@@ -192,11 +192,13 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				log.Println("JobHandler.Run.HasError", err)
 				task.FreeTask()
 				return false, "Not found page"
-			} else if !j.Browser.CheckCaptcha(searchHtml) {
+			}else if j.Browser.CheckCaptcha(searchHtml) {
+				fmt.Println("Присутствует каптча")
 				task.FreeTask()
 				j.Cancel()
-				return false, "Отсутствует PAA."
+				return false, "Присутствует каптча"
 			} else if !j.CheckPaa(searchHtml) {
+				fmt.Println("Отсутствует PAA")
 				task.SetError("Отсутствует PAA.")
 				j.Cancel()
 				return false, "Отсутствует PAA."
@@ -209,12 +211,14 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	}
 
 	if j.CheckFinished() {
+		fmt.Println("Задача завершилась преждевременно")
 		task.FreeTask()
 		j.Cancel()
 		return false, "Timeout"
 	}
 
 	if searchHtml == "" {
+		fmt.Println("Контент не подгрузился, задачу закрываем")
 		j.Cancel()
 		task.SetLog("Контент не подгрузился, задачу закрываем")
 		return
@@ -571,11 +575,11 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		var videosHtml string
 		if j.Browser.ctx != nil {
 			if err := chromedp.Run(j.Browser.ctx,
-				j.Browser.runWithTimeOut(30, false, chromedp.Tasks{
+				j.Browser.runWithTimeOut(50, false, chromedp.Tasks{
 					chromedp.Sleep(time.Second * time.Duration(rand.Intn(5))),
 					// Устанавливаем страницу для парсинга
 					//chromedp.Navigate("https://deelay.me/23545/google.com"),
-					chromedp.Navigate("https://www.google.com/search?source=lnms&tbm=vid&as_sitesearch=youtube.com&as_qdr=y&num=50&q=" + task.Keyword),
+					chromedp.Navigate("https://www.google.com/search?source=lnms&tbm=vid&as_sitesearch=youtube.com&num=50&q=" + task.Keyword),
 					chromedp.WaitVisible("#rso",chromedp.ByQuery),
 					chromedp.OuterHTML("#rso", &videosHtml, chromedp.ByQuery),
 				}),

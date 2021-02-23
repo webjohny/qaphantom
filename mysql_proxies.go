@@ -13,7 +13,7 @@ func (m *MysqlDb) GetFreeProxy() MysqlProxy {
 
 	t := time.Now()
 	now := t.Format("2006-01-02 15:04:05")
-	sqlQuery := "SELECT * FROM `proxy` WHERE (status is NULL OR status = 0) AND (timeout is NULL OR timeout < '" + now + "') ORDER BY RAND() LIMIT 1"
+	sqlQuery := "SELECT * FROM `proxy` WHERE (`status` is NULL OR `status` = 0) AND (`timeout` is NULL OR `timeout` < '" + now + "') ORDER BY `status` ASC, `timeout` ASC LIMIT 1"
 	fmt.Println(sqlQuery)
 
 	err := m.db.Get(&proxy, sqlQuery)

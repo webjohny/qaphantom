@@ -928,11 +928,10 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 
 		// Ищем дату в блоке, она может быть или в div (если вне текста) или в span (если внутри текста)
 		date := s.Find(".kX21rb").Text()
-		if date == "" {
-			date = s.Find(".Od5Jsd").Text()
-		}
-		text := strings.Replace(s.Find(".mod").Text(), date, "", -1)
-		txtHtml, _ := s.Find(".mod").Html()
+
+		text := strings.Replace(s.Find(".wDYxhc").Text(), date, "", -1)
+
+		txtHtml, _ := s.Find(".wDYxhc").Html()
 
 		if j.task.ParseDoubles > 0 || !MYSQL.GetResultByQAndA(question, text).Id.Valid {
 			// Берём уникальный идентификатор для вопроса

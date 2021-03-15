@@ -167,6 +167,17 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	j.config = MYSQL.GetConfig()
 
+	wp := services.Wordpress{}
+	if task.ParseSearch4 < 1 {
+		wp.Connect(`https://` + task.Domain, task.Login, task.Password, 1)
+		if !wp.CheckConn() {
+			task.SetLog("Не получилось подключится к wp xmlrpc (https://" + task.Domain + " - " + task.Login + " / " + task.Password + ")")
+			task.SetError(wp.GetError().Error())
+			go j.Cancel()
+			return false, "Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")"
+		}
+	}
+
 	for i := 1; i < 2; i++ {
 		if j.CheckFinished() {
 			task.SetLog("Задача завершилась преждевременно из-за таймаута")
@@ -375,14 +386,6 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	if task.ParseSearch4 < 1 {
 		qaTotalPage := QaTotalPage{}
-		wp := services.Wordpress{}
-		wp.Connect(`https://` + task.Domain + `/xmlrpc2.php`, task.Login, task.Password, 1)
-		if !wp.CheckConn() {
-			task.SetLog("Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")")
-			task.SetError(wp.GetError().Error())
-			go j.Cancel()
-			return false, "Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")"
-		}
 
 		list := "ol"
 		lists := map[string]string{"ul": "ol", "ol": "ul"}

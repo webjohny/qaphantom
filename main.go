@@ -22,8 +22,6 @@ func main() {
 	// Connect to MysqlDB
 	MYSQL.CreateConnection(CONF.MysqlHost, CONF.MysqlDb, CONF.MysqlLogin, CONF.MysqlPass)
 
-	// Run routes
-
 	if CONF.Env == "local" {
 		task := MYSQL.GetFreeTask(564805)
 		task.SetTimeout(2)

@@ -22,6 +22,15 @@ func main() {
 	// Connect to MysqlDB
 	MYSQL.CreateConnection(CONF.MysqlHost, CONF.MysqlDb, CONF.MysqlLogin, CONF.MysqlPass)
 
+	//aafprocesses.com
+	//jekyll1911 / ghjcnjgfhjkm
+	//wp := services.Wordpress{}
+	//wp.Connect(`https://aafprocesses.com`, "jekyll1911", "ghjcnjgfhjkm", 1)
+	//log.Println(wp.CatIdByName("QA"))
+	//log.Println(wp.GetPost(1))
+	//log.Fatal(wp.NewPost("Test article", "Test article", 1, 0))
+
+
 	if CONF.Env == "local" {
 		task := MYSQL.GetFreeTask(564805)
 		task.SetTimeout(2)

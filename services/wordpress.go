@@ -98,6 +98,11 @@ func (w *Wordpress) Connect(url string, username string, password string, blogId
 		username,
 		password,
 	})
+	var result interface{}
+	err = c.Client.Call(`wp.getTerms`, append(
+		w.cnf, "category",
+	), &result)
+	log.Fatal(err)
 	if err != nil {
 		w.err = err
 		log.Println("Wordpress.Connect.HasError", err)

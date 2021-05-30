@@ -245,7 +245,7 @@ func (b *Browser) ScreenShot(url string) (bool, []byte) {
 	if err := chromedp.Run(b.ctx,
 		chromedp.Navigate(url),
 		chromedp.ActionFunc(func(ctxt context.Context) error {
-			_, viewLayout, contentRect, err := page.GetLayoutMetrics().Do(ctxt)
+			_, viewLayout, contentRect, _, _, _, err := page.GetLayoutMetrics().Do(ctxt)
 			if err != nil {
 				return err
 			}

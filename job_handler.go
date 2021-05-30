@@ -2,13 +2,19 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"github.com/h2non/filetype"
+	"io/ioutil"
 	"log"
 	"math"
 	"math/rand"
+	"net/http"
 	"net/url"
+	"path"
+	"qaphantom/wordpress"
 	"regexp"
 	"strconv"
 	"strings"
@@ -33,6 +39,7 @@ type JobHandler struct {
 	config MysqlConfig
 	task MysqlFreeTask
 	proxy Proxy
+	wp *wordpress.Client
 
 	Browser Browser
 	ctx context.Context
@@ -85,6 +92,13 @@ type QaTotalPage struct {
 	Content string
 	CatId int
 	PhotoId int
+}
+
+
+type WpImage struct {
+	Id int
+	Url string
+	UrlMedium string
 }
 
 type QaImageResult struct {
@@ -167,16 +181,29 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	j.config = MYSQL.GetConfig()
 
-	wp := services.Wordpress{}
+	var wp *wordpress.Client
 	if task.ParseSearch4 < 1 {
-		wp.Connect(`https://` + task.Domain, task.Login, task.Password, 1)
-		if !wp.CheckConn() {
-			task.SetLog("Не получилось подключится к wp xmlrpc (https://" + task.Domain + " - " + task.Login + " / " + task.Password + ")")
-			task.SetError(wp.GetError().Error())
-			go j.Cancel()
-			return false, "Не получилось подключится к wp xmlrpc (https://" + task.Domain + "/xmlrpc2.php - " + task.Login + " / " + task.Password + ")"
+		wp = wordpress.NewClient(&wordpress.Options{
+			BaseAPIURL: "https://" + task.Domain + "/wp-json/wp/v2",
+			Username:   task.Login,
+			Password:   task.Password,
+		})
+		if wp == nil {
+			task.SetLog("Не получилось подключится к wp api (https://" + task.Domain + " - " + task.Login + " / " + task.Password + ")")
+			task.SetLog("Пробуем http соединение")
+			wp = wordpress.NewClient(&wordpress.Options{
+				BaseAPIURL: "http://" + task.Domain + "/wp-json/wp/v2",
+				Username:   task.Login,
+				Password:   task.Password,
+			})
+			if wp == nil {
+				task.SetLog("Не получилось подключится к wp api")
+				j.Cancel()
+				return false, "Не получилось подключится к wp api"
+			}
 		}
 	}
+	j.wp = wp
 
 	for i := 1; i < 2; i++ {
 		if j.CheckFinished() {
@@ -520,7 +547,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				task.SetLog("Новое фото")
 
 				// Загружаем фото в Вордпресс
-				res, _ := wp.UploadFile(photo.Url, 0, photo.Encoded)
+				res, _ := j.UploadFile(photo.Url, 0, photo.Encoded)
 
 				log.Println(res)
 
@@ -530,11 +557,10 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 					// Обрабатываем результат добавления фото в Вордпресс
 					qaTotalPage.PhotoId = res.Id
 					photo.Url = res.Url
-					photo.UrlMedium = res.UrlMedium
 
 					// Готовим код вставки фото в текст
 					if task.PubImage >= 2 {
-						mainImg = `<p><img class="alignright size-medium" src="` + photo.UrlMedium + `"></p>` + "\n"
+						mainImg = `<p><img class="alignright size-medium" src="` + photo.Url + `"></p>` + "\n"
 					}
 				}else if photo.Url != "" {
 					task.SetLog("Фото (" + photo.Url + ") не загрузилось на сайт")
@@ -631,6 +657,9 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 
 		// Пробегаемся по всем блокам
+		//jso, _ := json.Marshal(qaQs)
+		//fmt.Println(string(jso))
+
 		for k, item := range qaQs{
 			// Подзаголовок
 			if task.ShFormat > 0 {
@@ -742,41 +771,104 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		}
 
 		// Определяем ID категории
-		qaTotalPage.CatId = wp.CatIdByName(task.Cat)
+		qaTotalPage.CatId = j.CatIdByName(task.Cat)
 		if qaTotalPage.CatId < 1 {
 			go task.SetLog("Проблема с размещением в рубрику")
-			go task.SetError(wp.GetError().Error())
 			go j.Cancel()
 			return false, "Проблема с размещением в рубрику"
 		}
 
 		// Отправляем заметку на сайт
-		postId := wp.NewPost(qaTotalPage.Title, qaTotalPage.Content, qaTotalPage.CatId, qaTotalPage.PhotoId)
-		var fault bool
-		if postId > 0 {
-			post := wp.GetPost(postId)
-			if post.Id > 0 {
-				jsonMarking, _ := json.Marshal(microMarking)
-				qaTotalPage.Content += `<script type="application/ld+json">`
-				qaTotalPage.Content += strings.ReplaceAll(string(jsonMarking), "{{link}}", post.Link)
-				qaTotalPage.Content += `</script>`
+		slugName := slug.Make(qaTotalPage.Title)
+		//jso, _ := json.Marshal(wpPost)
+		//fmt.Println(string(jso))
+		//log.Fatal(slugName)
+		posts, _, _, err := wp.Posts().List("slug=" + slugName)
+		var post *wordpress.Post
+		var respBody []byte
+		var check bool
 
-				wp.EditPost(postId, qaTotalPage.Title, qaTotalPage.Content)
-			}else{
-				fault = true
+		if posts != nil && len(posts) > 0 {
+			post = &posts[0]
+
+			jsonMarking, _ := json.Marshal(microMarking)
+			qaTotalPage.Content += `<script type="application/ld+json">`
+			qaTotalPage.Content += strings.ReplaceAll(string(jsonMarking), "{{link}}", post.Link)
+			qaTotalPage.Content += `</script>`
+
+			post.FeaturedImage = qaTotalPage.PhotoId
+			post.Content.Raw = qaTotalPage.Content
+			post.Categories = []int{qaTotalPage.CatId}
+			post, _, respBody, err = wp.Posts().Update(post.ID, post)
+			if err != nil {
+				i := strings.Index(string(respBody), `name="loginform"`)
+				if i > -1 {
+					check = true
+				}else{
+					task.SetError("Не получилось редактировать статью на сайте. " + err.Error())
+					task.SetLog(string(respBody))
+					j.Cancel()
+					return false, "Timeout"
+				}
+			}else if post != nil && post.ID != 0 {
+				task.SetLog("Статья отредактирована на сайте. ID: " + strconv.Itoa(post.ID))
 			}
 		}else{
-			fault = true
+			post, _, respBody, err = wp.Posts().Create(&wordpress.Post{
+				FeaturedImage: qaTotalPage.PhotoId,
+				Title: wordpress.Title{
+					Raw: qaTotalPage.Title,
+				},
+				Content: wordpress.Content{
+					Raw: qaTotalPage.Content,
+				},
+				Excerpt: wordpress.Excerpt{
+					Raw: "",
+				},
+				Categories: []int{qaTotalPage.CatId},
+				Format: wordpress.PostFormatStandard,
+				Type:   wordpress.PostTypePost,
+				Status: wordpress.PostStatusPublish,
+				Slug:   slugName,
+			})
+			if err != nil {
+				i := strings.Index(string(respBody), `name="loginform"`)
+				if i > -1 {
+					check = true
+				}else{
+					task.SetError("Не получилось разместить статью на сайте. " + err.Error())
+					task.SetLog(string(respBody))
+					j.Cancel()
+					return false, "Timeout"
+				}
+			}else if post != nil && post.ID != 0 {
+				task.SetLog("Статья размещена на сайте. ID: " + strconv.Itoa(post.ID))
+			}
 		}
 
-		if fault {
-			task.SetLog("Не получилось разместить статью на сайте")
-			task.SetError(wp.GetError().Error())
-			go j.Cancel()
-			return false, "Не получилось разместить статью на сайте"
+		if check {
+			task.SetLog("Статья размещена на сайте")
 		}
 
-		task.SetLog("Статья размещена на сайте")
+		// Отправляем заметку на сайт
+		//postId := wp.NewPost(qaTotalPage.Title, qaTotalPage.Content, qaTotalPage.CatId, qaTotalPage.PhotoId)
+		//var fault bool
+		//if postId > 0 {
+		//	post := wp.GetPost(postId)
+		//	if post.Id > 0 {
+		//		jsonMarking, _ := json.Marshal(microMarking)
+		//		qaTotalPage.Content += `<script type="application/ld+json">`
+		//		qaTotalPage.Content += strings.ReplaceAll(string(jsonMarking), "{{link}}", post.Link)
+		//		qaTotalPage.Content += `</script>`
+		//
+		//		wp.EditPost(postId, qaTotalPage.Title, qaTotalPage.Content)
+		//	}else{
+		//		fault = true
+		//	}
+		//}else{
+		//	fault = true
+		//}
+
 	}else{
 		task.SetLog(`Данные сохранены в "Search for"`)
 	}
@@ -1197,6 +1289,72 @@ func (j *JobHandler) AntiCaptcha(url string, html string) (string, error) {
 		log.Println("JobHandler.AntiCaptcha.2.HasError", err)
 	}
 	return key, err
+}
+
+func (j *JobHandler) UploadFile(url string, postId int, encoded bool) (WpImage, error) {
+	var image WpImage
+	var bytes []byte
+	var err error
+	var name string
+
+	if !encoded {
+		resp, _ := http.Get(url)
+		defer resp.Body.Close()
+
+		bytes, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Println("Wordpress.UploadFile.HasError", err)
+			return image, err
+		}
+		name = path.Base(url)
+	}else{
+		bytes, err = base64.StdEncoding.DecodeString(url)
+		if err != nil {
+			log.Println("Wordpress.UploadFile.HasError.1", err)
+			return image, err
+		}
+		kind, _ := filetype.Match(bytes)
+		if kind == filetype.Unknown {
+			fmt.Println("Wordpress.UploadFile.HasError.2", "Unknown file type")
+			return image, nil
+		}
+
+		name = UTILS.RandStringRunes(20) + "." + kind.Extension
+	}
+
+	mime := http.DetectContentType(bytes)
+	if !strings.Contains(mime, "image") {
+		return image, nil
+	}
+
+	file, _, _, err := j.wp.Media().Create(&wordpress.MediaUploadOptions{
+		Filename:    name,
+		ContentType: mime,
+		Data:        bytes,
+	})
+	if err != nil {
+		fmt.Println("ERR.JobHandler.Run.Screenshot.3", err)
+	} else {
+		image.Id = file.ID
+		image.Url = file.SourceURL
+	}
+
+	return image, nil
+}
+
+func (j *JobHandler) CatIdByName(slug string) int{
+	var catId int
+	cats, _, _, _ := j.wp.Categories().List(map[string]string{
+		"slug": slug,
+	})
+
+	//jsc, _ := json.Marshal(cats)
+	//fmt.Println(string(jsc))
+	if cats != nil && len(cats) > 0 {
+		catId = cats[0].ID
+	}
+
+	return catId
 }
 
 func (j *JobHandler) Cancel() {

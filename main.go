@@ -27,13 +27,13 @@ func main() {
 		task.SetTimeout(2)
 
 		go func() {
-			job := JobHandler{}
-			job.IsStart = true
-			if job.Browser.Init() {
-				job.Run(2)
-				job.Run(1)
-				//job.Run(1)
-			}
+			//job := JobHandler{}
+			//job.IsStart = true
+			//if job.Browser.Init() {
+			//	job.Run(2)
+			//	job.Run(1)
+			//	//job.Run(1)
+			//}
 		}()
 
 		time.Sleep(100)

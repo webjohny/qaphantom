@@ -146,7 +146,11 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		return false, "Свободных задач нет в наличии"
 	}
 	taskId = task.Id
-	task.Domain = task.GetRandDomain()
+	if task.Domain != "" {
+		task.Domain = task.GetRandDomain()
+	}else{
+		task.ParseSearch4 = 1
+	}
 	//task.SetLog("Задача #" + strconv.Itoa(taskId) + " с запросом (" + task.Keyword + ") взята в работу")
 
 	j.task = task
@@ -182,6 +186,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	j.config = MYSQL.GetConfig()
 
 	var wp *wordpress.Client
+
 	if task.ParseSearch4 < 1 {
 		wp = wordpress.NewClient(&wordpress.Options{
 			BaseAPIURL: "https://" + task.Domain + "/wp-json/wp/v2",
@@ -362,6 +367,8 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			"cat" : task.Cat,
 			"domain" : task.Domain,
 			"q" : setting.Question,
+			"text" : setting.Text,
+			"html" : setting.Html,
 			"task_id" : strconv.Itoa(task.Id),
 			"link" : setting.Link,
 			"link_title" : setting.LinkTitle,
@@ -411,7 +418,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		})
 	}
 
-	if task.ParseSearch4 < 1 {
+	//if task.ParseSearch4 < 1 {
 		qaTotalPage := QaTotalPage{}
 
 		list := "ol"
@@ -543,11 +550,15 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			// Добавляем фото в Вордпресс
 			if photo.Url == "" {
 				task.SetLog("Фото не найдено")
-			} else {
+			} else if task.Domain != "" {
 				task.SetLog("Новое фото")
-
-				// Загружаем фото в Вордпресс
-				res, _ := j.UploadFile(photo.Url, 0, photo.Encoded)
+				var res WpImage
+				if task.Domain == "" {
+					res, _ = j.UploadFile(photo.Url)
+				}else {
+					// Загружаем фото в Вордпресс
+					res, _ = j.WpUploadFile(photo.Url, 0, photo.Encoded)
+				}
 
 				log.Println(res)
 
@@ -770,12 +781,14 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			return false, "Timeout"
 		}
 
-		// Определяем ID категории
-		qaTotalPage.CatId = j.CatIdByName(task.Cat)
-		if qaTotalPage.CatId < 1 {
-			go task.SetLog("Проблема с размещением в рубрику")
-			go j.Cancel()
-			return false, "Проблема с размещением в рубрику"
+		if task.Domain != "" {
+			// Определяем ID категории
+			qaTotalPage.CatId = j.CatIdByName(task.Cat)
+			if qaTotalPage.CatId < 1 {
+				go task.SetLog("Проблема с размещением в рубрику")
+				go j.Cancel()
+				return false, "Проблема с размещением в рубрику"
+			}
 		}
 
 		// Отправляем заметку на сайт
@@ -788,7 +801,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		var respBody []byte
 		var check bool
 
-		if posts != nil && len(posts) > 0 {
+		if (posts != nil && len(posts) > 0) || task.Domain == "" {
 			post = &posts[0]
 
 			jsonMarking, _ := json.Marshal(microMarking)
@@ -796,24 +809,33 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			qaTotalPage.Content += strings.ReplaceAll(string(jsonMarking), "{{link}}", post.Link)
 			qaTotalPage.Content += `</script>`
 
-			post.FeaturedImage = qaTotalPage.PhotoId
-			post.Content.Raw = qaTotalPage.Content
-			post.Categories = []int{qaTotalPage.CatId}
-			post, _, respBody, err = wp.Posts().Update(post.ID, post)
-			if err != nil {
-				i := strings.Index(string(respBody), `name="loginform"`)
-				if i > -1 {
-					check = true
-				}else{
-					task.SetError("Не получилось редактировать статью на сайте. " + err.Error())
-					task.SetLog(string(respBody))
-					j.Cancel()
-					return false, "Timeout"
+			if task.Domain != "" {
+				post.FeaturedImage = qaTotalPage.PhotoId
+				post.Content.Raw = qaTotalPage.Content
+				post.Categories = []int{qaTotalPage.CatId}
+				post, _, respBody, err = wp.Posts().Update(post.ID, post)
+				if err != nil {
+					i := strings.Index(string(respBody), `name="loginform"`)
+					if i > -1 {
+						check = true
+					} else {
+						task.SetError("Не получилось редактировать статью на сайте. " + err.Error())
+						task.SetLog(string(respBody))
+						j.Cancel()
+						return false, "Timeout"
+					}
+				} else if post != nil && post.ID != 0 {
+					task.SetLog("Статья отредактирована на сайте. ID: " + strconv.Itoa(post.ID))
 				}
-			}else if post != nil && post.ID != 0 {
-				task.SetLog("Статья отредактирована на сайте. ID: " + strconv.Itoa(post.ID))
+			}else{
+				_, _ = MYSQL.InsertOrUpdateResult(map[string]interface{}{
+					//"a" : setting.Text,
+					"q" : qaTotalPage.Title,
+					"html" : qaTotalPage.Content,
+					"task_id" : strconv.Itoa(task.Id),
+				})
 			}
-		}else{
+		}else {
 			post, _, respBody, err = wp.Posts().Create(&wordpress.Post{
 				FeaturedImage: qaTotalPage.PhotoId,
 				Title: wordpress.Title{
@@ -869,9 +891,9 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		//	fault = true
 		//}
 
-	}else{
-		task.SetLog(`Данные сохранены в "Search for"`)
-	}
+	//}else{
+	//	task.SetLog(`Данные сохранены в "Search for"`)
+	//}
 	task.SetFinished(1, "")
 	fmt.Println(taskId)
 	go j.Cancel()
@@ -1291,7 +1313,62 @@ func (j *JobHandler) AntiCaptcha(url string, html string) (string, error) {
 	return key, err
 }
 
-func (j *JobHandler) UploadFile(url string, postId int, encoded bool) (WpImage, error) {
+func (j *JobHandler) UploadFile(url string) (WpImage, error) {
+	var image WpImage
+	var bytes []byte
+	var err error
+	var name string
+
+	resp, _ := http.Get(url)
+	defer resp.Body.Close()
+
+	bytes, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("Wordpress.UploadFile.HasError", err)
+		return image, err
+	}
+	name = path.Base(url)
+	fmt.Println(bytes)
+	fmt.Println(name)
+
+	//body := &bytes.Buffer{}
+	//writer := multipart.NewWriter(body)
+	//part, err := writer.CreateFormFile(filetype, filepath.Base(file.Name()))
+	//
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//io.Copy(part, file)
+	//writer.Close()
+	//request, err := http.NewRequest("POST", url, body)
+	//
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//request.Header.Add("Content-Type", "multipart/form-data")
+	//client := &http.Client{}
+	//
+	//response, err := client.Do(request)
+	//
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//defer response.Body.Close()
+	//
+	//content, err := ioutil.ReadAll(response.Body)
+	//
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//return content
+
+	return image, err
+}
+
+func (j *JobHandler) WpUploadFile(url string, postId int, encoded bool) (WpImage, error) {
 	var image WpImage
 	var bytes []byte
 	var err error

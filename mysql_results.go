@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"log"
 	"strconv"
 	"time"
 )
@@ -24,7 +25,7 @@ func (m *MysqlDb) GetResultByQ(q string) MysqlResult {
 
 	err := m.db.Get(&result, sqlQuery, q)
 	if err != nil {
-		//log.Println("MysqlDb.GetResultByQAndA.HasError", err)
+		log.Println("MysqlDb.GetResultByQ.HasError", err)
 	}
 
 	return result
@@ -68,16 +69,18 @@ func (m *MysqlDb) UpdateResult(data map[string]interface{}, id int) (sql.Result,
 		updateQuery := ""
 		i := 0
 		for k, v := range data {
-			if i > 0 {
-				updateQuery += ", "
+			if v != "" {
+				if i > 0 {
+					updateQuery += ", "
+				}
+				updateQuery += "`" + k + "` = "
+				if v == "NULL" {
+					updateQuery += "NULL"
+				} else {
+					updateQuery += ":" + k
+				}
+				i++
 			}
-			updateQuery += "`" + k + "` = "
-			if v == "NULL" {
-				updateQuery += "NULL"
-			}else{
-				updateQuery += ":" + k
-			}
-			i++
 		}
 		sqlQuery += updateQuery
 	}
@@ -91,6 +94,7 @@ func (m *MysqlDb) UpdateResult(data map[string]interface{}, id int) (sql.Result,
 
 func (m *MysqlDb) InsertOrUpdateResult(item map[string]interface{}) (sql.Result, error) {
 	result := m.GetResultByQ(item["q"].(string))
+
 	var res sql.Result
 	var err error
 	if !result.Id.Valid {

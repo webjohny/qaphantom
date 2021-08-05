@@ -27,13 +27,26 @@ func main() {
 		task.SetTimeout(2)
 
 		go func() {
-			//job := JobHandler{}
-			//job.IsStart = true
-			//if job.Browser.Init() {
-			//	job.Run(2)
-			//	job.Run(1)
-			//	//job.Run(1)
-			//}
+			//fmt.Println(MYSQL.InsertOrUpdateResult(map[string]interface{}{
+			//	//"a" : setting.Text,
+			//	"link": "",
+			//	"text": "",
+			//	"cat": task.Cat,
+			//	"domain": task.Domain,
+			//	"cat_id": task.CatId,
+			//	"site_id": task.SiteId,
+			//	"link_title": "",
+			//	"q" : "Test query",
+			//	"html" : "<div>34343a</div>",
+			//	"task_id" : strconv.Itoa(task.Id),
+			//}))
+			job := JobHandler{}
+			job.IsStart = true
+			if job.Browser.Init() {
+				job.Run(2)
+				job.Run(1)
+				//job.Run(1)
+			}
 		}()
 
 		time.Sleep(100)

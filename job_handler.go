@@ -288,7 +288,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		if err := chromedp.Run(j.Browser.ctx,
 			j.Browser.runWithTimeOut(10, false, chromedp.Tasks{
 				// Кликаем сразу на первый вопрос
-				chromedp.Click(".related-question-pair:first-child .cbphWd"),
+				chromedp.Click(".related-question-pair .r21Kzd"),
 				// Ждём 0.3 секунды чтобы открылся вопрос
 				chromedp.Sleep(time.Second * duration),
 			}),
@@ -314,8 +314,10 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	if j.Browser.ctx != nil {
 		// Запускаем функцию перебора вопросов
 		if j.config.GetExtra().RedirectMethod {
+			fmt.Println("RedirectMethod")
 			settings = j.RedirectParsing(&stats)
 		}else{
+			fmt.Println("ClickParsing")
 			settings = j.ClickParsing(&stats)
 		}
 	}else{
@@ -509,74 +511,77 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		var photo QaImageResult
 		var mainImg string
 
-		if task.PubImage < 1 {
-			task.SetLog("Парсинг фото отключён настройками")
-		}else{
-			// Парсинг только по ключу
-			if task.ImageKey == 2 {
-				task.SetLog("Парсинг фото только по ключу")
-				if task.Keyword != "" {
+		if task.Domain != "" {
+
+			if task.PubImage < 1 {
+				task.SetLog("Парсинг фото отключён настройками")
+			} else {
+				// Парсинг только по ключу
+				if task.ImageKey == 2 {
+					task.SetLog("Парсинг фото только по ключу")
+					if task.Keyword != "" {
+						if task.ImageSource == 0 {
+							photo = j.ParsePhotos(task.Theme, "flickr", false)
+						} else if task.ImageSource == 1 {
+							photo = j.ParsePhotos(task.Keyword, "google", false)
+						}
+					}
+				} else if task.ImageKey == 1 { // Парсинг только по теме
+					task.SetLog("Парсинг фото только по теме")
+					if task.Theme != "" {
+						if task.ImageSource == 0 {
+							photo = j.ParsePhotos(task.Theme, "flickr", true)
+						} else if task.ImageSource == 1 {
+							photo = j.ParsePhotos(task.Theme, "google", true)
+						}
+					}
+				} else { // Парсинг сначала по ключу, потом по теме
+					task.SetLog("Парсинг фото сначала по ключу, потом по теме")
 					if task.ImageSource == 0 {
-						photo = j.ParsePhotos(task.Theme, "flickr", false)
+						photo = j.ParsePhotos(task.Keyword, "flickr", false)
 					} else if task.ImageSource == 1 {
 						photo = j.ParsePhotos(task.Keyword, "google", false)
 					}
-				}
-			} else if task.ImageKey == 1 { // Парсинг только по теме
-				task.SetLog("Парсинг фото только по теме")
-				if task.Theme != "" {
-					if task.ImageSource == 0 {
-						photo = j.ParsePhotos(task.Theme, "flickr", true)
-					} else if task.ImageSource == 1 {
-						photo = j.ParsePhotos(task.Theme, "google", true)
+					if photo.Id == "" {
+						if task.ImageSource == 0 {
+							photo = j.ParsePhotos(task.Theme, "flickr", true)
+						} else if task.ImageSource == 1 {
+							photo = j.ParsePhotos(task.Theme, "google", true)
+						}
 					}
 				}
-			} else { // Парсинг сначала по ключу, потом по теме
-				task.SetLog("Парсинг фото сначала по ключу, потом по теме")
-				if task.ImageSource == 0 {
-					photo = j.ParsePhotos(task.Keyword, "flickr", false)
-				}else if task.ImageSource == 1 {
-					photo = j.ParsePhotos(task.Keyword, "google", false)
-				}
-				if photo.Id == "" {
-					if task.ImageSource == 0 {
-						photo = j.ParsePhotos(task.Theme, "flickr", true)
-					}else if task.ImageSource == 1 {
-						photo = j.ParsePhotos(task.Theme, "google", true)
+
+				// Добавляем фото в Вордпресс
+				if photo.Url == "" {
+					task.SetLog("Фото не найдено")
+				} else if task.Domain != "" {
+					task.SetLog("Новое фото")
+					var res WpImage
+					if task.Domain == "" {
+						res, _ = j.UploadFile(photo.Url)
+					} else {
+						// Загружаем фото в Вордпресс
+						res, _ = j.WpUploadFile(photo.Url, 0, photo.Encoded)
 					}
-				}
-			}
 
-			// Добавляем фото в Вордпресс
-			if photo.Url == "" {
-				task.SetLog("Фото не найдено")
-			} else if task.Domain != "" {
-				task.SetLog("Новое фото")
-				var res WpImage
-				if task.Domain == "" {
-					res, _ = j.UploadFile(photo.Url)
-				}else {
-					// Загружаем фото в Вордпресс
-					res, _ = j.WpUploadFile(photo.Url, 0, photo.Encoded)
-				}
+					log.Println(res)
 
-				log.Println(res)
+					if res.Url != "" {
+						task.SetLog("Фото загружено на сайт")
 
-				if res.Url != "" {
-					task.SetLog("Фото загружено на сайт")
+						// Обрабатываем результат добавления фото в Вордпресс
+						qaTotalPage.PhotoId = res.Id
+						photo.Url = res.Url
 
-					// Обрабатываем результат добавления фото в Вордпресс
-					qaTotalPage.PhotoId = res.Id
-					photo.Url = res.Url
-
-					// Готовим код вставки фото в текст
-					if task.PubImage >= 2 {
-						mainImg = `<p><img class="alignright size-medium" src="` + photo.Url + `"></p>` + "\n"
+						// Готовим код вставки фото в текст
+						if task.PubImage >= 2 {
+							mainImg = `<p><img class="alignright size-medium" src="` + photo.Url + `"></p>` + "\n"
+						}
+					} else if photo.Url != "" {
+						task.SetLog("Фото (" + photo.Url + ") не загрузилось на сайт")
+					} else {
+						task.SetLog("Фото не найдено для поста")
 					}
-				}else if photo.Url != "" {
-					task.SetLog("Фото (" + photo.Url + ") не загрузилось на сайт")
-				}else {
-					task.SetLog("Фото не найдено для поста")
 				}
 			}
 		}
@@ -796,18 +801,27 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		//jso, _ := json.Marshal(wpPost)
 		//fmt.Println(string(jso))
 		//log.Fatal(slugName)
-		posts, _, _, err := wp.Posts().List("slug=" + slugName)
+		var posts []wordpress.Post
+		var err error
+
+		if task.Domain != "" {
+			posts, _, _, err = wp.Posts().List("slug=" + slugName)
+		}
 		var post *wordpress.Post
 		var respBody []byte
 		var check bool
 
 		if (posts != nil && len(posts) > 0) || task.Domain == "" {
-			post = &posts[0]
+			if posts != nil && len(posts) > 0 {
+				post = &posts[0]
+			}
 
-			jsonMarking, _ := json.Marshal(microMarking)
-			qaTotalPage.Content += `<script type="application/ld+json">`
-			qaTotalPage.Content += strings.ReplaceAll(string(jsonMarking), "{{link}}", post.Link)
-			qaTotalPage.Content += `</script>`
+			if post != nil {
+				jsonMarking, _ := json.Marshal(microMarking)
+				qaTotalPage.Content += `<script type="application/ld+json">`
+				qaTotalPage.Content += strings.ReplaceAll(string(jsonMarking), "{{link}}", post.Link)
+				qaTotalPage.Content += `</script>`
+			}
 
 			if task.Domain != "" {
 				post.FeaturedImage = qaTotalPage.PhotoId
@@ -828,12 +842,18 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 					task.SetLog("Статья отредактирована на сайте. ID: " + strconv.Itoa(post.ID))
 				}
 			}else{
-				_, _ = MYSQL.InsertOrUpdateResult(map[string]interface{}{
-					//"a" : setting.Text,
+				fmt.Println(MYSQL.InsertOrUpdateResult(map[string]interface{}{
+					"link": qaTotalPage.Url,
+					"text": "",
+					"cat": task.Cat,
+					"domain": task.Domain,
+					"cat_id": task.CatId,
+					"site_id": task.SiteId,
+					"link_title": "",
 					"q" : qaTotalPage.Title,
 					"html" : qaTotalPage.Content,
 					"task_id" : strconv.Itoa(task.Id),
-				})
+				}))
 			}
 		}else {
 			post, _, respBody, err = wp.Posts().Create(&wordpress.Post{
@@ -936,7 +956,7 @@ func (j *JobHandler) RedirectParsing(stats *QaStats) map[string]QaSetting {
 			if j.config.GetExtra().FastParsing && stats.All > 6 {
 				return
 			}
-			question := s.Find(".cbphWd").Text()
+			question := s.Find(".wwB5gf").Text()
 			link, _ := s.Find(".g a").Attr("href")
 
 			// Ищем дату в блоке, она может быть или в div (если вне текста) или в span (если внутри текста)
@@ -950,7 +970,7 @@ func (j *JobHandler) RedirectParsing(stats *QaStats) map[string]QaSetting {
 			if j.task.ParseDoubles > 0 || !MYSQL.GetResultByQAndA(question, text).Id.Valid {
 				// Берём уникальный идентификатор для вопроса
 				stats.All++
-				ved, _ := s.Find(".cbphWd").Attr("data-ved")
+				ved, _ := s.Attr("data-ved")
 				if question != "" {
 					qa := QaSetting{}
 					qa.Question = question
@@ -1015,7 +1035,7 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 	// Вытягиваем html код PAA для парсинга вопросов
 	if err := chromedp.Run(j.Browser.ctx,
 		j.Browser.runWithTimeOut(10, false, chromedp.Tasks{
-			chromedp.OuterHTML(`.kno-kp .ifM9O`, &paaHtml, chromedp.ByQuery),
+			chromedp.OuterHTML(`[jscontroller="ILbBec"]`, &paaHtml, chromedp.ByQuery),
 		}),
 	); err != nil {
 		log.Println("JobHandler.ClickParsing.HasError", err)
@@ -1035,25 +1055,28 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 	var tasks chromedp.Tasks
 	clicked := map[string]bool{}
 	// Начинаем перебор блоков с вопросами
-	doc.Find(".related-question-pair").Each(func(i int, s *goquery.Selection) {
+	doc.Find(`[jsname="Cpkphb"]`).Each(func(i int, s *goquery.Selection) {
 		if j.config.GetExtra().FastParsing && stats.All > 6 {
 			return
 		}
-		question := s.Find(".cbphWd").Text()
+
+		//iDjcJe IX9Lgd wwB5gf
+		//iDjcJe IX9Lgd wwB5gf
+		question := s.Find(".wwB5gf").Text()
 		link, _ := s.Find(".g a").Attr("href")
-		isExpanded :=  s.Find(".UgLoB").Length() > 0
+		//isExpanded :=  s.Find("[style=\"opacity: 0.001;\"]").Length() > 0
 
 		// Ищем дату в блоке, она может быть или в div (если вне текста) или в span (если внутри текста)
 		date := s.Find(".kX21rb").Text()
 
-		text := strings.Replace(s.Find(".wDYxhc").Text(), date, "", -1)
+		text := strings.Replace(s.Find(".LGOjhe").Text(), date, "", -1)
 
-		txtHtml, _ := s.Find(".wDYxhc").Html()
+		txtHtml, _ := s.Find(".LGOjhe").Html()
 
 		if j.task.ParseDoubles > 0 || !MYSQL.GetResultByQAndA(question, text).Id.Valid {
 			// Берём уникальный идентификатор для вопроса
 			stats.All++
-			ved, _ := s.Find(".cbphWd").Attr("data-ved")
+			ved, _ := s.Find(`[jsname="F79BRe"]`).Attr("data-lk")
 			if question != "" {
 				qa := QaSetting{}
 				qa.Question = question
@@ -1070,14 +1093,15 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 
 				// Собираем задачи для кликинга по вопросам
 				if _, ok := settings[ved]; !ok {
-					if isExpanded {
+					//if isExpanded {
+						fmt.Println("[data-lk=\"" + ved + "\"] .r21Kzd")
 						tasks = append(tasks, chromedp.Tasks{
-							chromedp.Click(".cbphWd[data-ved=\"" + ved + "\"]"),
+							chromedp.Click("[data-lk=\"" + ved + "\"] .r21Kzd"),
 							chromedp.Sleep(time.Second * time.Duration(rand.Intn(5))),
 						})
 
 						clicked[ved] = true
-					}
+					//}
 				}
 
 				if strings.Contains(txtHtml, "youtube.com/watch") || strings.Contains(txtHtml, "Suggested clip") {

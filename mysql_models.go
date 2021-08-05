@@ -68,6 +68,8 @@ type MysqlResult struct {
 	Cat sql.NullString `db:"cat" json:"cat"`
 	CatId sql.NullInt64 `db:"cat_id" json:"cat_id"`
 	SiteId sql.NullInt64 `db:"site_id" json:"site_id"`
+	Text sql.NullString `db:"text" json:"text"`
+	Html sql.NullString `db:"html" json:"html"`
 	Q sql.NullString `db:"q" json:"q"`
 	A sql.NullString `db:"a" json:"a"`
 	Link sql.NullString `db:"link" json:"link"`

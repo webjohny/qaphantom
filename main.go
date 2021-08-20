@@ -1,7 +1,13 @@
 package main
 
 import (
+	"fmt"
+	"github.com/PuerkitoBio/goquery"
+	"io/ioutil"
+	"log"
 	"os"
+	"regexp"
+	"strings"
 	"time"
 
 	"qaphantom/config"
@@ -18,6 +24,8 @@ func main() {
 	path, _ := os.Getwd()
 
 	CONF.Create(path + "/config.json")
+
+	log.Fatal(readFile())
 
 	// Connect to MysqlDB
 	MYSQL.CreateConnection(CONF.MysqlHost, CONF.MysqlDb, CONF.MysqlLogin, CONF.MysqlPass)
@@ -62,4 +70,46 @@ func main() {
 	routes.Run()
 
 	time.Sleep(time.Minute)
+}
+
+func readFile() string{
+	file, err := os.Open("html.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		if err = file.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+
+	b, err := ioutil.ReadAll(file)
+
+	str := string(b)
+
+	var re = regexp.MustCompile(`(?si)(\<script.*?\<\/script\>)`)
+	s := re.ReplaceAllString(str, "")
+	re = regexp.MustCompile(`(?si)(\<style.*?\<\/style\>)`)
+	s = re.ReplaceAllString(s, "")
+
+	f, err := os.OpenFile("html.txt", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+	f.WriteString(s)
+	if err := f.Close(); err != nil {
+		log.Fatal(err)
+	}
+
+	paaReader := strings.NewReader(s)
+	doc, err := goquery.NewDocumentFromReader(paaReader)
+	if err != nil {
+		log.Println("JobHandler.RedirectParsing.2.HasError", err)
+		return "settings"
+	}
+
+	fmt.Println(doc.Find("#rso").Text())
+
+	return ""
 }

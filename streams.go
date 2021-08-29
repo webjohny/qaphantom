@@ -11,12 +11,12 @@ import (
 )
 
 type Stream struct {
-	state bool
-	job JobHandler
-	Proxy Proxy
-	browser Browser
-	cmd string
-	ctxTimer context.Context
+	state       bool
+	job         JobHandler
+	Proxy       Proxy
+	browser     Browser
+	cmd         string
+	ctxTimer    context.Context
 	cancelTimer context.CancelFunc
 }
 
@@ -27,7 +27,7 @@ func (s *Stream) StartTaskTimer(streamId int, limit int64) {
 		limit = 360
 	}
 
-	s.ctxTimer, s.cancelTimer = context.WithTimeout(context.Background(), time.Second * time.Duration(limit))
+	s.ctxTimer, s.cancelTimer = context.WithTimeout(context.Background(), time.Second*time.Duration(limit))
 	defer s.cancelTimer()
 
 	if cmd != "" {
@@ -37,14 +37,14 @@ func (s *Stream) StartTaskTimer(streamId int, limit int64) {
 		fmt.Println("Start job", limit)
 		s.browser.limit = limit
 		s.browser.streamId = streamId
-		for {
-			if s.browser.ctx == nil {
-				s.browser.Reload()
-				time.Sleep(time.Minute * 5)
-			}else{
-				break
-			}
-		}
+		// for {
+		// 	if s.browser.ctx == nil {
+		// 		s.browser.Reload()
+		// 		time.Sleep(time.Minute * 5)
+		// 	} else {
+		// 		break
+		// 	}
+		// }
 		s.job.Browser = s.browser
 		s.job.isFinished = make(chan bool)
 		s.job.IsStart = true
@@ -73,9 +73,10 @@ func (s *Streams) StartStreams(count int, limit int, cmd string) {
 		stream := STREAMS.Add(i)
 		if cmd != "" {
 			stream.cmd = cmd + " " + strconv.Itoa(i)
-		}else{
+		} else {
 			stream.job = JobHandler{}
 		}
+		fmt.Println(i)
 		go stream.Start(i, int64(limit))
 	}
 }
@@ -95,10 +96,10 @@ func (s *Streams) StartLoop(count int, limit int, cmd string) {
 	restartFunc = func() {
 		if STREAMS.isStarted {
 			s.ReStartStreams(count, limit, cmd)
-			time.AfterFunc(time.Second * 2000, restartFunc)
+			time.AfterFunc(time.Second*2000, restartFunc)
 		}
 	}
-	time.AfterFunc(time.Second * 2000, restartFunc)
+	time.AfterFunc(time.Second*2000, restartFunc)
 
 	STREAMS.isStarted = true
 	go s.StartStreams(count, limit, cmd)
@@ -107,7 +108,7 @@ func (s *Streams) StartLoop(count int, limit int, cmd string) {
 func (s *Stream) Start(streamId int, limit int64) {
 	s.state = true
 
-	time.Sleep(time.Millisecond * time.Duration(streamId * 500))
+	time.Sleep(time.Millisecond * time.Duration(streamId*500))
 
 	if s.cmd == "" {
 		for {
@@ -115,7 +116,7 @@ func (s *Stream) Start(streamId int, limit int64) {
 			if !s.browser.Init() {
 				s.browser.Cancel()
 				time.Sleep(time.Minute)
-			}else{
+			} else {
 				break
 			}
 		}
@@ -147,14 +148,13 @@ func (s *Stream) Stop() {
 	go s.job.Cancel()
 }
 
-
 type Streams struct {
 	isStarted bool
-	items map[int]*Stream
-	mu sync.RWMutex
+	items     map[int]*Stream
+	mu        sync.RWMutex
 }
 
-func (s *Streams) Get(id int) *Stream{
+func (s *Streams) Get(id int) *Stream {
 	if stream, ok := s.items[id]; ok {
 		return stream
 	} else {
@@ -162,7 +162,7 @@ func (s *Streams) Get(id int) *Stream{
 	}
 }
 
-func (s *Streams) Add(id int) *Stream{
+func (s *Streams) Add(id int) *Stream {
 	s.mu.Lock()
 	if len(s.items) < 1 {
 		s.items = map[int]*Stream{}
@@ -188,7 +188,7 @@ func (s *Streams) StopAll() {
 		}
 		s.items = map[int]*Stream{}
 	}
-	s.StopAllCmd()
+	s.StopAllInstances()
 }
 
 func (s *Streams) StopAllWithoutClean() {
@@ -199,10 +199,10 @@ func (s *Streams) StopAllWithoutClean() {
 		}
 	}
 	//kill -9 $(pgrep -f chromium)
-	s.StopAllCmd()
+	s.StopAllInstances()
 }
 
-func (s *Streams) StopAllCmd() {
+func (s *Streams) StopAllInstances() {
 	_, err := exec.CommandContext(context.TODO(), "bash", "-c", "kill -9 $(pgrep -f chromium)").Output()
 	if err != nil {
 		fmt.Println("StopAllWithoutClean", err)

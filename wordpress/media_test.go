@@ -2,9 +2,9 @@ package wordpress_test
 
 import (
 	"io/ioutil"
-	"linksparser/wordpress"
 	"net/http"
 	"os"
+	"qaphantom/wordpress"
 	"testing"
 )
 

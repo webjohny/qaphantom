@@ -28,7 +28,7 @@ func (m *MysqlDb) GetFreeTask(id int) MysqlFreeTask {
 	sqlSite := "SELECT " + sqlSelectSite + " FROM sites s"
 
 	err := m.db.Select(&sites, sqlSite)
-	if err != nil{
+	if err != nil {
 		log.Println("MysqlDb.GetFreeTask.HasError", err)
 	}
 	sites = ShuffleSites(sites)
@@ -62,7 +62,7 @@ func (m *MysqlDb) GetFreeTask(id int) MysqlFreeTask {
 			sqlQuery = "SELECT t.id, t.keyword, t.try_count, c.title AS cat, t.site_id, t.cat_id FROM tasks t"
 			sqlQuery += " LEFT JOIN cats c ON (c.id = t.cat_id)"
 			sqlQuery += " AND t.id = " + strconv.Itoa(id)
-		}else{
+		} else {
 			sqlQuery = "SELECT t.id, t.keyword, t.try_count, c.title AS cat, t.site_id, t.cat_id FROM tasks t"
 			sqlQuery += " LEFT JOIN cats c ON (c.id = t.cat_id)"
 			sqlQuery += " WHERE t.site_id = "
@@ -77,7 +77,7 @@ func (m *MysqlDb) GetFreeTask(id int) MysqlFreeTask {
 
 		var task MysqlTask
 		err := m.db.Get(&task, sqlQuery)
-		if err != nil{
+		if err != nil {
 			log.Println("MysqlDb.GetFreeTask.2.HasError", err)
 		}
 		freeTask.MergeTask(task)
@@ -113,10 +113,13 @@ func (m *MysqlDb) GetTaskByKeyword(k string) MysqlTask {
 func (m *MysqlDb) GetCountTasks(params map[string]interface{}) int {
 	rows, _ := m.db.Query("SELECT COUNT(*) as count FROM `tasks`")
 	var count int
-	for rows.Next() {
-		err := rows.Scan(&count)
-		if err != nil {
-			log.Println("MysqlDb.GetCountTasks.HasError", err)
+
+	if rows != nil {
+		for rows.Next() {
+			err := rows.Scan(&count)
+			if err != nil {
+				log.Println("MysqlDb.GetCountTasks.HasError", err)
+			}
 		}
 	}
 	return count
@@ -128,18 +131,18 @@ func (m *MysqlDb) GetTasks(params map[string]interface{}) []MysqlTask {
 	//fmt.Println(task.ParseDate.String)
 	sqlQuery := "SELECT * FROM `tasks`"
 
-	if len(params) > 0{
+	if len(params) > 0 {
 		if params["isStat"] != 0 {
 			sqlQuery = "SELECT id, site_id, cat_id, status FROM `tasks`"
 		}
 	}
 	sqlQuery = sqlQuery + " ORDER BY `id`"
 
-	if len(params) > 0{
+	if len(params) > 0 {
 		if params["limit"] != 0 {
 			if params["offset"] != 0 {
 				sqlQuery = sqlQuery + "LIMIT " + strconv.Itoa(params["offset"].(int)) + ", " + strconv.Itoa(params["limit"].(int))
-			}else{
+			} else {
 				sqlQuery = sqlQuery + " LIMIT " + strconv.Itoa(params["limit"].(int))
 			}
 		}
@@ -166,7 +169,7 @@ func (m *MysqlDb) UpdateTask(data map[string]interface{}, id int) (sql.Result, e
 			updateQuery += "`" + k + "` = "
 			if v == "NULL" {
 				updateQuery += "NULL"
-			}else{
+			} else {
 				updateQuery += ":" + k
 			}
 			//data[k] = UTILS.MysqlRealEscapeString(v.(string))
@@ -197,7 +200,7 @@ func (m *MysqlDb) AddTask(item map[string]interface{}) (sql.Result, error) {
 }
 
 func (m *MysqlDb) LoopCollectStats() {
-	if ! checkLoopCollect {
+	if !checkLoopCollect {
 		checkLoopCollect = true
 		for {
 			count := m.GetCountTasks(map[string]interface{}{})
@@ -210,7 +213,6 @@ func (m *MysqlDb) LoopCollectStats() {
 		}
 	}
 }
-
 
 func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 	params := make(map[string]interface{})
@@ -278,15 +280,15 @@ func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 							site["domain"] = Site.Domain.String
 						}
 
-						if _, ok := site["ready"]; ! ok {
+						if _, ok := site["ready"]; !ok {
 							site["ready"] = 0
 						}
 
-						if _, ok := site["error"]; ! ok {
+						if _, ok := site["error"]; !ok {
 							site["error"] = 0
 						}
 
-						if _, ok := site["total"]; ! ok {
+						if _, ok := site["total"]; !ok {
 							site["total"] = 0
 						}
 
@@ -305,15 +307,15 @@ func (m *MysqlDb) CollectStats() map[int64]map[string]interface{} {
 
 						cat["title"] = Cat.Title.String
 
-						if _, ok := cat["ready"]; ! ok {
+						if _, ok := cat["ready"]; !ok {
 							cat["ready"] = 0
 						}
 
-						if _, ok := cat["error"]; ! ok {
+						if _, ok := cat["error"]; !ok {
 							cat["error"] = 0
 						}
 
-						if _, ok := cat["total"]; ! ok {
+						if _, ok := cat["total"]; !ok {
 							cat["total"] = 0
 						}
 

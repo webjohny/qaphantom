@@ -1,9 +1,9 @@
 package wordpress_test
 
 import (
-	"linksparser/wordpress"
 	"log"
 	"net/http"
+	"qaphantom/wordpress"
 	"testing"
 )
 

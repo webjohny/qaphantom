@@ -2,8 +2,8 @@ package wordpress_test
 
 import (
 	"fmt"
-	"linksparser/wordpress"
 	"net/http"
+	"qaphantom/wordpress"
 	"testing"
 	"time"
 )

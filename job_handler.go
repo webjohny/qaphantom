@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"github.com/h2non/filetype"
 	"io/ioutil"
 	"log"
 	"math"
@@ -21,6 +20,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/h2non/filetype"
+
 	"qaphantom/services"
 
 	"github.com/PuerkitoBio/goquery"
@@ -32,91 +33,90 @@ import (
 
 type JobHandler struct {
 	NumberInits int
-	SearchHtml string
-	IsStart bool
+	SearchHtml  string
+	IsStart     bool
 
-	taskId int
-	config MysqlConfig
-	task MysqlFreeTask
-	proxy Proxy
-	wp *wordpress.Client
+	taskId      int
+	config      MysqlConfig
+	task        MysqlFreeTask
+	proxy       Proxy
+	wp          *wordpress.Client
 	qaTotalPage QaTotalPage
 
-	Browser Browser
-	ctx context.Context
+	Browser    Browser
+	ctx        context.Context
 	isFinished chan bool
 }
 
 type QaSetting struct {
-	H int
-	Fast bool
-	Question string
-	Text string
-	Html string
-	Link string
+	H         int
+	Fast      bool
+	Question  string
+	Text      string
+	Html      string
+	Link      string
 	LinkTitle string
-	Date string
-	Ved string
-	Length int
-	Viewed bool
-	Clicked bool
+	Date      string
+	Ved       string
+	Length    int
+	Viewed    bool
+	Clicked   bool
 }
 
 type QaFast struct {
-	H int
-	A string
-	Link string
+	H         int
+	A         string
+	Link      string
 	LinkTitle string
-	Fast bool
-	Date string
-	Length int
+	Fast      bool
+	Date      string
+	Length    int
 }
 
 // Счётчик типов вопросов
 type QaStats struct {
-	All int // всего вопросов найдено
+	All     int // всего вопросов найдено
 	Checked int // всего вопросов найдено
-	Yt int // вопросы с youtube видео
-	S int // простые текстовые ответы
+	Yt      int // вопросы с youtube видео
+	S       int // простые текстовые ответы
 
-	Qac int // кол-во блоков
-	Size int // длина контента
-	Length int // текущая длина контента по факту
+	Qac     int // кол-во блоков
+	Size    int // длина контента
+	Length  int // текущая длина контента по факту
 	CycExit int // защита от бесконечного цикла
 
 	Wqc int // полное количество блоков с вопросами
 }
 
 type QaTotalPage struct {
-	Url string
-	Title string
+	Url     string
+	Title   string
 	Content string
-	CatId int
+	CatId   int
 	PhotoId int
 }
 
-
 type WpImage struct {
-	Id int
-	Url string
+	Id        int
+	Url       string
 	UrlMedium string
 }
 
 type QaImageResult struct {
-	Id string
-	Url string
+	Id        string
+	Url       string
 	UrlMedium string
-	Author string
+	Author    string
 	ShortLink string
-	Encoded bool
+	Encoded   bool
 }
 
 type XmlPhotos struct {
 	XMLName xml.Name `xml:"photos"`
-	Photos []struct {
-		Id  int `xml:"id,attr"`
-		OwnerName  string `xml:"ownername,attr"`
-		Url string `xml:"url_z,attr"`
+	Photos  []struct {
+		Id        int    `xml:"id,attr"`
+		OwnerName string `xml:"ownername,attr"`
+		Url       string `xml:"url_z,attr"`
 	} `xml:"photo"`
 }
 
@@ -136,7 +136,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	var task MysqlFreeTask
 	if j.taskId < 1 {
 		task = MYSQL.GetFreeTask(0)
-	}else{
+	} else {
 		task = MYSQL.GetFreeTask(j.taskId)
 	}
 
@@ -149,7 +149,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	taskId = task.Id
 	if task.Domain != "" {
 		task.Domain = task.GetRandDomain()
-	}else{
+	} else {
 		task.ParseSearch4 = 1
 	}
 	//task.SetLog("Задача #" + strconv.Itoa(taskId) + " с запросом (" + task.Keyword + ") взята в работу")
@@ -177,7 +177,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 	if task.From != 0 && task.To != 0 {
 		stats.Size = rand.Intn((task.To - task.From) + task.From)
-	}else if task.QaCountFrom != 0 && task.QaCountTo != 0 {
+	} else if task.QaCountFrom != 0 && task.QaCountTo != 0 {
 		stats.Qac = rand.Intn((task.QaCountTo - task.QaCountFrom) + task.QaCountFrom)
 	}
 
@@ -219,6 +219,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		// Запускаемся
 		googleUrl = "https://www.google.com/search?hl=en&q=" + url.QueryEscape(task.Keyword)
+		// googleUrl = "https://www.google.com/search?hl=en&q=" + url.QueryEscape("What credit score do I need to get a credit card?")
 		task.SetLog("Открываем страницу (попытка №" + strconv.Itoa(i) + "): " + googleUrl)
 
 		if j.Browser.ctx != nil {
@@ -227,7 +228,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				//chromedp.Sleep(time.Second * 60),
 				j.Browser.runWithTimeOut(20, false, chromedp.Tasks{
 					chromedp.Navigate(googleUrl),
-					chromedp.Sleep(time.Second*time.Duration(rand.Intn(5))),
+					chromedp.Sleep(time.Second * time.Duration(rand.Intn(5))),
 					chromedp.WaitVisible("body", chromedp.ByQuery),
 					// Вытащить html на проверку каптчи
 					chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
@@ -236,7 +237,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				log.Println("JobHandler.Run.HasError", err)
 				task.FreeTask()
 				return false, "Not found page"
-			}else if j.Browser.CheckCaptcha(searchHtml) {
+			} else if j.Browser.CheckCaptcha(searchHtml) {
 				fmt.Println("Присутствует каптча")
 				task.FreeTask()
 				j.Cancel()
@@ -247,7 +248,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 				j.Cancel()
 				return false, "Отсутствует PAA."
 			}
-		}else{
+		} else {
 			task.FreeTask()
 			j.Cancel()
 			return false, "Context undefined"
@@ -272,7 +273,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	task.SetLog("Начинаем обработку PAA")
 
 	var fast QaFast
-	if task.ParseFast > 0{
+	if task.ParseFast > 0 {
 		// Загружаем HTML документ в GoQuery пакет который организует облегчённую работу с HTML селекторами
 		fast = j.SetFastAnswer(searchHtml)
 	}
@@ -299,7 +300,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			go j.Cancel()
 			return false, "Отсутствует PAA."
 		}
-	}else{
+	} else {
 		task.FreeTask()
 		go j.Cancel()
 		return false, "Context undefined"
@@ -317,11 +318,11 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		if j.config.GetExtra().RedirectMethod {
 			fmt.Println("RedirectMethod")
 			settings = j.RedirectParsing(&stats)
-		}else{
+		} else {
 			fmt.Println("ClickParsing")
-			settings = j.ClickParsing(&stats)
+			settings = j.ClickParsing(&stats, true)
 		}
-	}else{
+	} else {
 		task.SetLog("Браузер не был запущен. Задача пропускается.")
 		go j.Cancel()
 		return false, "Context undefined"
@@ -349,15 +350,16 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			task.SetError(msg)
 			return false, msg
 
-		} else if stats.S <= task.QaCountFrom {}
+		} else if stats.S <= task.QaCountFrom {
+		}
 	}
 
 	var mainEntity []map[string]interface{}
 
 	microMarking := map[string]interface{}{
-		"@context" : "https://schema.org",
-		"@type" : "FAQPage",
-		"mainEntity" : &mainEntity,
+		"@context":   "https://schema.org",
+		"@type":      "FAQPage",
+		"mainEntity": &mainEntity,
 	}
 
 	symb := task.GetRandSymb()
@@ -365,16 +367,16 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 	for _, setting := range settings {
 		if _, err := MYSQL.AddResult(map[string]interface{}{
 			//"a" : setting.Text,
-			"cat_id" : task.CatId,
-			"site_id" : task.SiteId,
-			"cat" : task.Cat,
-			"domain" : task.Domain,
-			"q" : setting.Question,
-			"text" : setting.Text,
-			"html" : setting.Html,
-			"task_id" : strconv.Itoa(task.Id),
-			"link" : setting.Link,
-			"link_title" : setting.LinkTitle,
+			"cat_id":     task.CatId,
+			"site_id":    task.SiteId,
+			"cat":        task.Cat,
+			"domain":     task.Domain,
+			"q":          setting.Question,
+			"text":       setting.Text,
+			"html":       setting.Html,
+			"task_id":    strconv.Itoa(task.Id),
+			"link":       setting.Link,
+			"link_title": setting.LinkTitle,
 		}); err != nil {
 			log.Println("JobHandler.Run.5.HasError", err)
 			task.SetLog("Не сохранился результат. (" + err.Error() + ")")
@@ -382,12 +384,12 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 
 		if task.SavingAvailable && !MYSQL.GetTaskByKeyword(setting.Question).Id.Valid {
 			if _, err := MYSQL.AddTask(map[string]interface{}{
-				"site_id" : strconv.Itoa(task.SiteId),
-				"cat_id" : strconv.Itoa(task.CatId),
-				"parent_id" : strconv.Itoa(task.Id),
-				"keyword" : setting.Question,
-				"parser" : strconv.Itoa(parser),
-				"error" : "",
+				"site_id":   strconv.Itoa(task.SiteId),
+				"cat_id":    strconv.Itoa(task.CatId),
+				"parent_id": strconv.Itoa(task.Id),
+				"keyword":   setting.Question,
+				"parser":    strconv.Itoa(parser),
+				"error":     "",
 			}); err != nil {
 				log.Println("JobHandler.Run.6.HasError", err)
 				task.SetLog("Не добавилась новая задача. (" + err.Error() + ")")
@@ -402,7 +404,7 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 		matches := UTILS.PregMatch(`(?P<sen>.+?\.)`, text)
 		if matches["sen"] != "" {
 			text = matches["sen"]
-		}else{
+		} else {
 			text = setting.Text
 		}
 		text += "<a href='{{link}}#qa-" + slug.Make(setting.Question) + "'>" + task.GetRandTag() + "</a>"
@@ -412,510 +414,504 @@ func (j *JobHandler) Run(parser int) (status bool, msg string) {
 			name = symb + name
 		}
 		mainEntity = append(mainEntity, map[string]interface{}{
-			"@type" : "Question",
-			"name" : name,
-			"acceptedAnswer" : map[string]string{
-				"@type" : "Answer",
-				"text" : text,
+			"@type": "Question",
+			"name":  name,
+			"acceptedAnswer": map[string]string{
+				"@type": "Answer",
+				"text":  text,
 			},
 		})
 	}
 
 	//if task.ParseSearch4 < 1 {
 
-		list := "ol"
-		lists := map[string]string{"ul": "ol", "ol": "ul"}
-		ch3 := 0
+	list := "ol"
+	lists := map[string]string{"ul": "ol", "ol": "ul"}
+	ch3 := 0
 
-		var qaQs []QaSetting
-		// Если есть быстрый ответ, ставим его первым
-		//if task.ParseFast > 0 && setting.Question != "" && task.H1 < 1 {
-		//	qaQs = append(qaQs, setting)
-		//}
-		for _, setting := range settings {
-			qaQs = append(qaQs, setting)
+	var qaQs []QaSetting
+	// Если есть быстрый ответ, ставим его первым
+	//if task.ParseFast > 0 && setting.Question != "" && task.H1 < 1 {
+	//	qaQs = append(qaQs, setting)
+	//}
+	for _, setting := range settings {
+		qaQs = append(qaQs, setting)
+	}
+
+	// Пробегаем по блокам
+	for k, q := range qaQs {
+		// Чередуем типы списков
+		if strings.Contains(q.Text, "<ul>") ||
+			strings.Contains(q.Text, "<ol>") {
+			q.Text = strings.ReplaceAll(q.Text, "<"+list+">", "<"+lists[list]+">")
+			q.Text = strings.ReplaceAll(q.Text, "</"+list+">", "</"+lists[list]+">")
+			list = lists[list]
 		}
 
-		// Пробегаем по блокам
-		for k, q := range qaQs {
-			// Чередуем типы списков
-			if strings.Contains(q.Text, "<ul>") ||
-				strings.Contains(q.Text, "<ol>"){
-				q.Text = strings.ReplaceAll(q.Text, "<" + list + ">", "<" + lists[list] + ">")
-				q.Text = strings.ReplaceAll(q.Text, "</" + list + ">", "</" + lists[list] + ">")
-				list = lists[list]
-			}
+		// Если это первый блок в списке
+		if k < 1 {
+			q.H = 2
+		} else if qaQs[k-1].Fast { // Если предыдущи блок был быстрым ответом
+			q.H = 2
+			ch3 = 0
+		}
 
-			// Если это первый блок в списке
-			if k < 1 {
-				q.H = 2
-			} else if qaQs[k - 1].Fast { // Если предыдущи блок был быстрым ответом
-				q.H = 2
-				ch3 = 0
-			}
+		// Если есть подзаголовок
+		if strings.Contains(q.Text, "<h3>") {
+			q.H = 2
+		}
 
-			// Если есть подзаголовок
-			if strings.Contains(q.Text, "<h3>") {
-				q.H = 2
-			}
-
-			// Если размер заголовка ещё не определён
-			if k > 0 && q.H < 1 {
-				if qaQs[k - 1].H == 2 {
+		// Если размер заголовка ещё не определён
+		if k > 0 && q.H < 1 {
+			if qaQs[k-1].H == 2 {
+				q.H = 3
+				ch3 = 1
+			} else if ch3 < 2 {
+				q.H = 3
+				ch3 = 2
+			} else if ch3 == 2 {
+				if UTILS.RandBool() {
 					q.H = 3
-					ch3 = 1
-				} else if ch3 < 2 {
-					q.H = 3
-					ch3 = 2
-				} else if ch3 == 2 {
-					if UTILS.RandBool() {
-						q.H = 3
-						ch3 = 3
-					}else {
-						q.H = 2
-						ch3 = 0
-					}
-				} else if ch3 == 3 {
+					ch3 = 3
+				} else {
 					q.H = 2
 					ch3 = 0
 				}
+			} else if ch3 == 3 {
+				q.H = 2
+				ch3 = 0
 			}
 		}
+	}
 
-		// Вычисляем кол-во блоков
-		qaCount := len(qaQs)
+	// Вычисляем кол-во блоков
+	qaCount := len(qaQs)
 
-		// Заголовок
-		variants := j.config.GetVariants()
+	// Заголовок
+	variants := j.config.GetVariants()
 
-		var h1 string
-		if task.H1 < 1 || len(qaQs) < 1 {
-			h1 = task.Keyword
-		}else if len(qaQs) > 0 && qaQs[0].Question != ""{
-			h1 = qaQs[0].Question
+	var h1 string
+	if task.H1 < 1 || len(qaQs) < 1 {
+		h1 = task.Keyword
+	} else if len(qaQs) > 0 && qaQs[0].Question != "" {
+		h1 = qaQs[0].Question
+	}
+	tmp := strings.Split(h1, " ")
+	if len(tmp) > 0 {
+		for k, v := range tmp {
+			tmp[k] = strings.Title(v)
 		}
-		tmp := strings.Split(h1, " ")
-		if len(tmp) > 0 {
-			for k, v := range tmp {
-				tmp[k] = strings.Title(v)
-			}
-		}
-		rand.Seed(time.Now().Unix()) // initialize global pseudo random generator
-		var variant string
-		if len(variants) > 0 {
-			variant = variants[rand.Intn(len(variants))]
-		}
+	}
+	rand.Seed(time.Now().Unix()) // initialize global pseudo random generator
+	var variant string
+	if len(variants) > 0 {
+		variant = variants[rand.Intn(len(variants))]
+	}
 
-		j.qaTotalPage.Title = variant + strings.Join(tmp, " ")
+	j.qaTotalPage.Title = variant + strings.Join(tmp, " ")
 
-		var photo QaImageResult
-		var mainImg string
+	var photo QaImageResult
+	var mainImg string
 
-		if task.Domain != "" {
+	if task.Domain != "" {
 
-			if task.PubImage < 1 {
-				task.SetLog("Парсинг фото отключён настройками")
-			} else {
-				// Парсинг только по ключу
-				if task.ImageKey == 2 {
-					task.SetLog("Парсинг фото только по ключу")
-					if task.Keyword != "" {
-						if task.ImageSource == 0 {
-							photo = j.ParsePhotos(task.Theme, "flickr", false)
-						} else if task.ImageSource == 1 {
-							photo = j.ParsePhotos(task.Keyword, "google", false)
-						}
-					}
-				} else if task.ImageKey == 1 { // Парсинг только по теме
-					task.SetLog("Парсинг фото только по теме")
-					if task.Theme != "" {
-						if task.ImageSource == 0 {
-							photo = j.ParsePhotos(task.Theme, "flickr", true)
-						} else if task.ImageSource == 1 {
-							photo = j.ParsePhotos(task.Theme, "google", true)
-						}
-					}
-				} else { // Парсинг сначала по ключу, потом по теме
-					task.SetLog("Парсинг фото сначала по ключу, потом по теме")
+		if task.PubImage < 1 {
+			task.SetLog("Парсинг фото отключён настройками")
+		} else {
+			// Парсинг только по ключу
+			if task.ImageKey == 2 {
+				task.SetLog("Парсинг фото только по ключу")
+				if task.Keyword != "" {
 					if task.ImageSource == 0 {
-						photo = j.ParsePhotos(task.Keyword, "flickr", false)
+						photo = j.ParsePhotos(task.Theme, "flickr", false)
 					} else if task.ImageSource == 1 {
 						photo = j.ParsePhotos(task.Keyword, "google", false)
 					}
-					if photo.Id == "" {
-						if task.ImageSource == 0 {
-							photo = j.ParsePhotos(task.Theme, "flickr", true)
-						} else if task.ImageSource == 1 {
-							photo = j.ParsePhotos(task.Theme, "google", true)
-						}
+				}
+			} else if task.ImageKey == 1 { // Парсинг только по теме
+				task.SetLog("Парсинг фото только по теме")
+				if task.Theme != "" {
+					if task.ImageSource == 0 {
+						photo = j.ParsePhotos(task.Theme, "flickr", true)
+					} else if task.ImageSource == 1 {
+						photo = j.ParsePhotos(task.Theme, "google", true)
 					}
 				}
-
-				// Добавляем фото в Вордпресс
-				if photo.Url == "" {
-					task.SetLog("Фото не найдено")
-				} else if task.Domain != "" {
-					task.SetLog("Новое фото")
-					var res WpImage
-					if task.Domain == "" {
-						res, _ = j.UploadFile(photo.Url)
-					} else {
-						// Загружаем фото в Вордпресс
-						res, _ = j.WpUploadFile(photo.Url, 0, photo.Encoded)
-					}
-
-					log.Println(res)
-
-					if res.Url != "" {
-						task.SetLog("Фото загружено на сайт")
-
-						// Обрабатываем результат добавления фото в Вордпресс
-						j.qaTotalPage.PhotoId = res.Id
-						photo.Url = res.Url
-
-						// Готовим код вставки фото в текст
-						if task.PubImage >= 2 {
-							mainImg = `<p><img class="alignright size-medium" src="` + photo.Url + `"></p>` + "\n"
-						}
-					} else if photo.Url != "" {
-						task.SetLog("Фото (" + photo.Url + ") не загрузилось на сайт")
-					} else {
-						task.SetLog("Фото не найдено для поста")
+			} else { // Парсинг сначала по ключу, потом по теме
+				task.SetLog("Парсинг фото сначала по ключу, потом по теме")
+				if task.ImageSource == 0 {
+					photo = j.ParsePhotos(task.Keyword, "flickr", false)
+				} else if task.ImageSource == 1 {
+					photo = j.ParsePhotos(task.Keyword, "google", false)
+				}
+				if photo.Id == "" {
+					if task.ImageSource == 0 {
+						photo = j.ParsePhotos(task.Theme, "flickr", true)
+					} else if task.ImageSource == 1 {
+						photo = j.ParsePhotos(task.Theme, "google", true)
 					}
 				}
 			}
-		}
 
-
-		var vCount int
-		var vStep int
-		var videos []string
-		var lastVideo string
-
-		if task.ParseSearch4 < 1 {
-
-			// Если в настройках не задан шаг расстановки видео
-			if task.VideoStep < 1 {
-				// Вычисляем кол-во видео
-				vCount = int(math.Floor(float64(stats.Length / 500)))
-				if vCount < 1 {
-					vCount = 1
-				}
-				// Шаг расстановки видео
-				vStep = int(math.Floor(float64((qaCount - 2) / vCount)))
-				if vStep < 1 {
-					vStep = 1
-				}
-			} else {
-				// Если в настройках задан шаг расстановки видео
-				vStep = task.VideoStep
-				vCount = int(math.Floor(float64((qaCount - 1) / vStep)))
-			}
-
-			task.SetLog("Парсим видео")
-
-			if j.CheckFinished() {
-				task.SetLog("Задача завершилась преждевременно из-за таймаута")
-				go j.Cancel()
-				return false, "Timeout"
-			}
-
-			// Парсим видео
-			var videosHtml string
-			if j.Browser.ctx != nil {
-				if err := chromedp.Run(j.Browser.ctx,
-					j.Browser.runWithTimeOut(50, false, chromedp.Tasks{
-						chromedp.Sleep(time.Second * time.Duration(rand.Intn(5))),
-						// Устанавливаем страницу для парсинга
-						//chromedp.Navigate("https://deelay.me/23545/google.com"),
-						chromedp.Navigate("https://www.google.com/search?source=lnms&tbm=vid&as_sitesearch=youtube.com&num=50&q=" + task.Keyword),
-						chromedp.WaitVisible("#rso", chromedp.ByQuery),
-						chromedp.OuterHTML("#rso", &videosHtml, chromedp.ByQuery),
-					}),
-				); err != nil {
-					log.Println("JobHandler.Run.7.HasError", err)
-					task.SetLog("Видео не спарсилось. (" + err.Error() + ")")
-				}
-			} else {
-				task.SetLog("Браузер не был запущен. Задача пропускается.")
-				go j.Cancel()
-				return false, "Context undefined"
-			}
-
-			if j.CheckFinished() {
-				task.SetLog("Задача завершилась преждевременно из-за таймаута")
-				go j.Cancel()
-				return false, "Timeout"
-			}
-
-
-			if videosHtml != "" {
-				videosHtml = "<div>" + videosHtml + "</div>"
-				videoReader := strings.NewReader(videosHtml)
-				doc, err := goquery.NewDocumentFromReader(videoReader)
-				if err != nil {
-					log.Println("JobHandler.Run.8.HasError", err)
-					task.SetLog("Неразборчивый код из youtube. (" + err.Error() + ")")
-				}
-
-				// Начинаем перебор блоков с видео
-				doc.Find("#rso").Find("a.IHSDrd").Each(func(i int, s *goquery.Selection) {
-					if len(videos) != vCount {
-						link, _ := s.Attr("href")
-						videos = append(videos, UTILS.YoutubeEmbed(link))
-						task.SetLog(link)
-					}
-				})
-
-				if len(videos) > 0 {
-					lastVideo, videos = videos[len(videos)-1], videos[:len(videos)-1]
-				}
-				task.SetLog("Парсинг видео. Готово")
-			}
-		}
-
-
-		// Пробегаемся по всем блокам
-		//jso, _ := json.Marshal(qaQs)
-		//fmt.Println(string(jso))
-
-		for k, item := range qaQs{
-			// Подзаголовок
-			if task.ShFormat > 0 {
-				item.Text = strings.ReplaceAll(item.Text, "<h3>", "<strong>")
-				item.Text = strings.ReplaceAll(item.Text, "</h3>", "</strong>")
-			}
-
-
-			if task.ParseSearch4 < 1 {
-				var firstVideo string
-				// Вставляем видео в текст
-				if task.VideoStep < 1 {
-					if k == (qaCount - 2) {
-						if lastVideo != "" {
-							j.qaTotalPage.Content += `<div class="mb-5"><iframe src="` + lastVideo + `" width="740" height="520" frameborder="0" allowfullscreen="allowfullscreen"></iframe></div>` + "\n"
-						}
-					} else if len(videos) > 0 && k > 0 && k < (qaCount-2) && k%vStep == 0 {
-						firstVideo, videos = videos[0], videos[1:]
-						if firstVideo != "" {
-							j.qaTotalPage.Content += `<div class="mb-5"><iframe src="` + firstVideo + `" width="740" height="520" frameborder="0" allowfullscreen="allowfullscreen"></iframe></div>` + "\n"
-						}
-					}
+			// Добавляем фото в Вордпресс
+			if photo.Url == "" {
+				task.SetLog("Фото не найдено")
+			} else if task.Domain != "" {
+				task.SetLog("Новое фото")
+				var res WpImage
+				if task.Domain == "" {
+					res, _ = j.UploadFile(photo.Url)
 				} else {
-					if k == qaCount-1 {
-						if lastVideo != "" {
-							j.qaTotalPage.Content += `<div class="mb-5"><iframe src="` + lastVideo + `" width="740" height="520" frameborder="0" allowfullscreen="allowfullscreen"></iframe></div>` + "\n"
-						}
-					} else if len(videos) > 0 && k > 0 && k < (qaCount-1) && k%vStep == 0 {
-						firstVideo, videos = videos[0], videos[1:]
-						if firstVideo != "" {
-							j.qaTotalPage.Content += `<div class="mb-5"><iframe src="` + firstVideo + `" width="740" height="520" frameborder="0" allowfullscreen="allowfullscreen"></iframe></div>` + "\n"
-						}
+					// Загружаем фото в Вордпресс
+					res, _ = j.WpUploadFile(photo.Url, 0, photo.Encoded)
+				}
+
+				log.Println(res)
+
+				if res.Url != "" {
+					task.SetLog("Фото загружено на сайт")
+
+					// Обрабатываем результат добавления фото в Вордпресс
+					j.qaTotalPage.PhotoId = res.Id
+					photo.Url = res.Url
+
+					// Готовим код вставки фото в текст
+					if task.PubImage >= 2 {
+						mainImg = `<p><img class="alignright size-medium" src="` + photo.Url + `"></p>` + "\n"
 					}
-				}
-			}
-
-			// Заголовок
-			if item.Question != "" {
-				j.qaTotalPage.Content += `<span id="qa-` + slug.Make(item.Question) + `"></span>`
-				if task.H1 < 1 || k > 0 {
-					if task.ShOrder < 1 {
-						j.qaTotalPage.Content += `<h` + strconv.Itoa(item.H) + `>` + item.Question + `</h` + strconv.Itoa(item.H) + ">\n"
-					} else {
-						j.qaTotalPage.Content += `<h2>` + item.Question + "</h2>\n"
-					}
-				}
-			}
-
-			// Если ответ первый
-			if k < 1 {
-				// Вставляем фото
-				j.qaTotalPage.Content += mainImg
-				// Ответ разбиваем по предложениям
-				if !strings.Contains(item.Text, "<ul>") && !strings.Contains(item.Text, "<ol>") && !strings.Contains(item.Text, "<h3>") {
-					formattedText := UTILS.StripTags(item.Text)
-					splittedText := UTILS.SentenceSplit(formattedText)
-					j.qaTotalPage.Content += "<p>" + strings.Join(splittedText, ".</p><p>") + ".</p>\n"
+				} else if photo.Url != "" {
+					task.SetLog("Фото (" + photo.Url + ") не загрузилось на сайт")
 				} else {
-					// Просто ставим ответ
-					j.qaTotalPage.Content += item.Text + "\n"
-				}
-			} else {
-				// Просто ставим ответ
-				j.qaTotalPage.Content += item.Text + "\n"
-			}
-
-			// Дата
-			if task.ParseDates > 0 && item.Date != "" {
-				j.qaTotalPage.Content += `<div id="qa_date">Date: ` + item.Date + "</div>\n"
-			}
-
-			// Ссылка
-			if task.Linking > 0 && item.Link != "" {
-				if task.Linking == 2 {
-					j.qaTotalPage.Content += `<p>Source: <a href="` + item.Link + `" target="_blank">` + item.LinkTitle + "</a></p>\n"
-				} else {
-					j.qaTotalPage.Content += `<p>Source: <code>` + item.Link + "</code></p>\n"
+					task.SetLog("Фото не найдено для поста")
 				}
 			}
 		}
+	}
 
-		// Добавляем копирайт автора фото в конце статьи
-		if photo.Author != "" || photo.ShortLink != "" {
-			j.qaTotalPage.Content += "<p>"
-			if photo.Author != "" {
-				j.qaTotalPage.Content += `Photo in the article by “` + photo.Author + `” `
+	var vCount int
+	var vStep int
+	var videos []string
+	var lastVideo string
+
+	if task.ParseSearch4 < 1 {
+		// Если в настройках не задан шаг расстановки видео
+		if task.VideoStep < 1 {
+			// Вычисляем кол-во видео
+			vCount = int(math.Floor(float64(stats.Length / 500)))
+			if vCount < 1 {
+				vCount = 1
 			}
-			if photo.ShortLink != "" {
-				j.qaTotalPage.Content += `<code>` + photo.ShortLink + `</code>`
+			// Шаг расстановки видео
+			vStep = int(math.Floor(float64((qaCount - 2) / vCount)))
+			if vStep < 1 {
+				vStep = 1
 			}
-			j.qaTotalPage.Content += "</p>\n"
+		} else {
+			// Если в настройках задан шаг расстановки видео
+			vStep = task.VideoStep
+			vCount = int(math.Floor(float64((qaCount - 1) / vStep)))
 		}
 
-		j.qaTotalPage.Content = strings.ReplaceAll(j.qaTotalPage.Content, "<p>…</p>", "")
+		task.SetLog("Парсим видео")
 
-		task.SetLog("Текст статьи подготовлен")
-
-		// Сохраняем текст
-		task.SetLog("Текст статьи сохранён в БД")
-		if !j.config.GetExtra().FastParsing && (
-			(task.QaCountFrom > 0 && len(qaQs) < task.QaCountFrom) ||
-			(task.From > 0 && utf8.RuneCountInString(j.qaTotalPage.Content) < task.From) ) {
-
-			task.SetError("Снята с публикации — слишком короткая статья получилась")
+		if j.CheckFinished() {
+			task.SetLog("Задача завершилась преждевременно из-за таймаута")
 			go j.Cancel()
-			return false, "Снята с публикации — слишком короткая статья получилась"
+			return false, "Timeout"
+		}
+
+		// Парсим видео
+		var videosHtml string
+		if j.Browser.ctx != nil {
+			if err := chromedp.Run(j.Browser.ctx,
+				j.Browser.runWithTimeOut(50, false, chromedp.Tasks{
+					chromedp.Sleep(time.Second * time.Duration(rand.Intn(5))),
+					// Устанавливаем страницу для парсинга
+					//chromedp.Navigate("https://deelay.me/23545/google.com"),
+					chromedp.Navigate("https://www.google.com/search?source=lnms&tbm=vid&as_sitesearch=youtube.com&num=50&q=" + task.Keyword),
+					chromedp.WaitVisible("#rso", chromedp.ByQuery),
+					chromedp.OuterHTML("#rso", &videosHtml, chromedp.ByQuery),
+				}),
+			); err != nil {
+				log.Println("JobHandler.Run.7.HasError", err)
+				task.SetLog("Видео не спарсилось. (" + err.Error() + ")")
+			}
+		} else {
+			task.SetLog("Браузер не был запущен. Задача пропускается.")
+			go j.Cancel()
+			return false, "Context undefined"
 		}
 
 		if j.CheckFinished() {
 			task.SetLog("Задача завершилась преждевременно из-за таймаута")
+			go j.Cancel()
 			return false, "Timeout"
 		}
 
-		if task.Domain != "" {
-			// Определяем ID категории
-			j.qaTotalPage.CatId = j.CatIdByName(task.Cat)
-			if j.qaTotalPage.CatId < 1 {
-				go task.SetLog("Проблема с размещением в рубрику")
-				go j.Cancel()
-				return false, "Проблема с размещением в рубрику"
-			}
-		}
-
-		// Отправляем заметку на сайт
-		slugName := slug.Make(j.qaTotalPage.Title)
-		//jso, _ := json.Marshal(wpPost)
-		//fmt.Println(string(jso))
-		//log.Fatal(slugName)
-		var posts []wordpress.Post
-		var err error
-
-		if task.Domain != "" {
-			posts, _, _, err = wp.Posts().List("slug=" + slugName)
-		}
-		var post *wordpress.Post
-		var respBody []byte
-		var check bool
-
-		if (posts != nil && len(posts) > 0) || task.Domain == "" {
-			if posts != nil && len(posts) > 0 {
-				post = &posts[0]
+		if videosHtml != "" {
+			videosHtml = "<div>" + videosHtml + "</div>"
+			videoReader := strings.NewReader(videosHtml)
+			doc, err := goquery.NewDocumentFromReader(videoReader)
+			if err != nil {
+				log.Println("JobHandler.Run.8.HasError", err)
+				task.SetLog("Неразборчивый код из youtube. (" + err.Error() + ")")
 			}
 
-			if post != nil {
-				jsonMarking, _ := json.Marshal(microMarking)
-				j.qaTotalPage.Content += `<script type="application/ld+json">`
-				j.qaTotalPage.Content += strings.ReplaceAll(string(jsonMarking), "{{link}}", post.Link)
-				j.qaTotalPage.Content += `</script>`
-			}
-
-			if task.Domain != "" {
-				post.FeaturedImage = j.qaTotalPage.PhotoId
-				post.Content.Raw = j.qaTotalPage.Content
-				post.Categories = []int{j.qaTotalPage.CatId}
-				post, _, respBody, err = wp.Posts().Update(post.ID, post)
-				if err != nil {
-					i := strings.Index(string(respBody), `name="loginform"`)
-					if i > -1 {
-						check = true
-					} else {
-						task.SetError("Не получилось редактировать статью на сайте. " + err.Error())
-						task.SetLog(string(respBody))
-						j.Cancel()
-						return false, "Timeout"
-					}
-				} else if post != nil && post.ID != 0 {
-					task.SetLog("Статья отредактирована на сайте. ID: " + strconv.Itoa(post.ID))
+			// Начинаем перебор блоков с видео
+			doc.Find("#rso").Find("a.IHSDrd").Each(func(i int, s *goquery.Selection) {
+				if len(videos) != vCount {
+					link, _ := s.Attr("href")
+					videos = append(videos, UTILS.YoutubeEmbed(link))
+					task.SetLog(link)
 				}
-			}else{
-				fmt.Println(MYSQL.InsertOrUpdateResult(map[string]interface{}{
-					"link": j.qaTotalPage.Url,
-					"text": "",
-					"cat": task.Cat,
-					"domain": task.Domain,
-					"cat_id": task.CatId,
-					"site_id": task.SiteId,
-					"link_title": "",
-					"q" : j.qaTotalPage.Title,
-					"html" : j.qaTotalPage.Content,
-					"task_id" : strconv.Itoa(task.Id),
-				}))
-			}
-		}else {
-			post, _, respBody, err = wp.Posts().Create(&wordpress.Post{
-				FeaturedImage: j.qaTotalPage.PhotoId,
-				Title: wordpress.Title{
-					Raw: j.qaTotalPage.Title,
-				},
-				Content: wordpress.Content{
-					Raw: j.qaTotalPage.Content,
-				},
-				Excerpt: wordpress.Excerpt{
-					Raw: "",
-				},
-				Categories: []int{j.qaTotalPage.CatId},
-				Format: wordpress.PostFormatStandard,
-				Type:   wordpress.PostTypePost,
-				Status: wordpress.PostStatusPublish,
-				Slug:   slugName,
 			})
+
+			if len(videos) > 0 {
+				lastVideo, videos = videos[len(videos)-1], videos[:len(videos)-1]
+			}
+			task.SetLog("Парсинг видео. Готово")
+		}
+	}
+
+	// Пробегаемся по всем блокам
+	//jso, _ := json.Marshal(qaQs)
+	//fmt.Println(string(jso))
+
+	for k, item := range qaQs {
+		// Подзаголовок
+		if task.ShFormat > 0 {
+			item.Text = strings.ReplaceAll(item.Text, "<h3>", "<strong>")
+			item.Text = strings.ReplaceAll(item.Text, "</h3>", "</strong>")
+		}
+
+		if task.ParseSearch4 < 1 {
+			var firstVideo string
+			// Вставляем видео в текст
+			if task.VideoStep < 1 {
+				if k == (qaCount - 2) {
+					if lastVideo != "" {
+						j.qaTotalPage.Content += `<div class="mb-5"><iframe src="` + lastVideo + `" width="740" height="520" frameborder="0" allowfullscreen="allowfullscreen"></iframe></div>` + "\n"
+					}
+				} else if len(videos) > 0 && k > 0 && k < (qaCount-2) && k%vStep == 0 {
+					firstVideo, videos = videos[0], videos[1:]
+					if firstVideo != "" {
+						j.qaTotalPage.Content += `<div class="mb-5"><iframe src="` + firstVideo + `" width="740" height="520" frameborder="0" allowfullscreen="allowfullscreen"></iframe></div>` + "\n"
+					}
+				}
+			} else {
+				if k == qaCount-1 {
+					if lastVideo != "" {
+						j.qaTotalPage.Content += `<div class="mb-5"><iframe src="` + lastVideo + `" width="740" height="520" frameborder="0" allowfullscreen="allowfullscreen"></iframe></div>` + "\n"
+					}
+				} else if len(videos) > 0 && k > 0 && k < (qaCount-1) && k%vStep == 0 {
+					firstVideo, videos = videos[0], videos[1:]
+					if firstVideo != "" {
+						j.qaTotalPage.Content += `<div class="mb-5"><iframe src="` + firstVideo + `" width="740" height="520" frameborder="0" allowfullscreen="allowfullscreen"></iframe></div>` + "\n"
+					}
+				}
+			}
+		}
+
+		// Заголовок
+		if item.Question != "" {
+			j.qaTotalPage.Content += `<span id="qa-` + slug.Make(item.Question) + `"></span>`
+			if task.H1 < 1 || k > 0 {
+				if task.ShOrder < 1 {
+					j.qaTotalPage.Content += `<h` + strconv.Itoa(item.H) + `>` + item.Question + `</h` + strconv.Itoa(item.H) + ">\n"
+				} else {
+					j.qaTotalPage.Content += `<h2>` + item.Question + "</h2>\n"
+				}
+			}
+		}
+
+		// Если ответ первый
+		if k < 1 {
+			// Вставляем фото
+			j.qaTotalPage.Content += mainImg
+			// Ответ разбиваем по предложениям
+			if !strings.Contains(item.Text, "<ul>") && !strings.Contains(item.Text, "<ol>") && !strings.Contains(item.Text, "<h3>") {
+				formattedText := UTILS.StripTags(item.Text)
+				splittedText := UTILS.SentenceSplit(formattedText)
+				j.qaTotalPage.Content += "<p>" + strings.Join(splittedText, ".</p><p>") + ".</p>\n"
+			} else {
+				// Просто ставим ответ
+				j.qaTotalPage.Content += item.Text + "\n"
+			}
+		} else {
+			// Просто ставим ответ
+			j.qaTotalPage.Content += item.Text + "\n"
+		}
+
+		// Дата
+		if task.ParseDates > 0 && item.Date != "" {
+			j.qaTotalPage.Content += `<div id="qa_date">Date: ` + item.Date + "</div>\n"
+		}
+
+		// Ссылка
+		if task.Linking > 0 && item.Link != "" {
+			if task.Linking == 2 {
+				j.qaTotalPage.Content += `<p>Source: <a href="` + item.Link + `" target="_blank">` + item.LinkTitle + "</a></p>\n"
+			} else {
+				j.qaTotalPage.Content += `<p>Source: <code>` + item.Link + "</code></p>\n"
+			}
+		}
+	}
+
+	// Добавляем копирайт автора фото в конце статьи
+	if photo.Author != "" || photo.ShortLink != "" {
+		j.qaTotalPage.Content += "<p>"
+		if photo.Author != "" {
+			j.qaTotalPage.Content += `Photo in the article by “` + photo.Author + `” `
+		}
+		if photo.ShortLink != "" {
+			j.qaTotalPage.Content += `<code>` + photo.ShortLink + `</code>`
+		}
+		j.qaTotalPage.Content += "</p>\n"
+	}
+
+	j.qaTotalPage.Content = strings.ReplaceAll(j.qaTotalPage.Content, "<p>…</p>", "")
+
+	task.SetLog("Текст статьи подготовлен")
+
+	// Сохраняем текст
+	task.SetLog("Текст статьи сохранён в БД")
+	if !j.config.GetExtra().FastParsing && ((task.QaCountFrom > 0 && len(qaQs) < task.QaCountFrom) ||
+		(task.From > 0 && utf8.RuneCountInString(j.qaTotalPage.Content) < task.From)) {
+
+		task.SetError("Снята с публикации — слишком короткая статья получилась")
+		go j.Cancel()
+		return false, "Снята с публикации — слишком короткая статья получилась"
+	}
+
+	if j.CheckFinished() {
+		task.SetLog("Задача завершилась преждевременно из-за таймаута")
+		return false, "Timeout"
+	}
+
+	if task.Domain != "" {
+		// Определяем ID категории
+		j.qaTotalPage.CatId = j.CatIdByName(task.Cat)
+		if j.qaTotalPage.CatId < 1 {
+			go task.SetLog("Проблема с размещением в рубрику")
+			go j.Cancel()
+			return false, "Проблема с размещением в рубрику"
+		}
+	}
+
+	// Отправляем заметку на сайт
+	slugName := slug.Make(j.qaTotalPage.Title)
+	//jso, _ := json.Marshal(wpPost)
+	//fmt.Println(string(jso))
+	//log.Fatal(slugName)
+	var posts []wordpress.Post
+	var err error
+
+	if task.Domain != "" {
+		posts, _, _, err = wp.Posts().List("slug=" + slugName)
+	}
+	var post *wordpress.Post
+	var respBody []byte
+	var check bool
+
+	if (posts != nil && len(posts) > 0) || task.Domain == "" {
+		if posts != nil && len(posts) > 0 {
+			post = &posts[0]
+		}
+
+		if post != nil {
+			jsonMarking, _ := json.Marshal(microMarking)
+			j.qaTotalPage.Content += `<script type="application/ld+json">`
+			j.qaTotalPage.Content += strings.ReplaceAll(string(jsonMarking), "{{link}}", post.Link)
+			j.qaTotalPage.Content += `</script>`
+		}
+
+		if task.Domain != "" {
+			post.FeaturedImage = j.qaTotalPage.PhotoId
+			post.Content.Raw = j.qaTotalPage.Content
+			post.Categories = []int{j.qaTotalPage.CatId}
+			post, _, respBody, err = wp.Posts().Update(post.ID, post)
 			if err != nil {
 				i := strings.Index(string(respBody), `name="loginform"`)
 				if i > -1 {
 					check = true
-				}else{
-					task.SetError("Не получилось разместить статью на сайте. " + err.Error())
+				} else {
+					task.SetError("Не получилось редактировать статью на сайте. " + err.Error())
 					task.SetLog(string(respBody))
 					j.Cancel()
 					return false, "Timeout"
 				}
-			}else if post != nil && post.ID != 0 {
-				task.SetLog("Статья размещена на сайте. ID: " + strconv.Itoa(post.ID))
+			} else if post != nil && post.ID != 0 {
+				task.SetLog("Статья отредактирована на сайте. ID: " + strconv.Itoa(post.ID))
 			}
+		} else {
+			fmt.Println(MYSQL.InsertOrUpdateResult(map[string]interface{}{
+				"link":       j.qaTotalPage.Url,
+				"text":       "",
+				"cat":        task.Cat,
+				"domain":     task.Domain,
+				"cat_id":     task.CatId,
+				"site_id":    task.SiteId,
+				"link_title": "",
+				"q":          j.qaTotalPage.Title,
+				"html":       j.qaTotalPage.Content,
+				"task_id":    strconv.Itoa(task.Id),
+			}))
 		}
-
-		if check {
-			task.SetLog("Статья размещена на сайте")
+	} else {
+		post, _, respBody, err = wp.Posts().Create(&wordpress.Post{
+			FeaturedImage: j.qaTotalPage.PhotoId,
+			Title: wordpress.Title{
+				Raw: j.qaTotalPage.Title,
+			},
+			Content: wordpress.Content{
+				Raw: j.qaTotalPage.Content,
+			},
+			Excerpt: wordpress.Excerpt{
+				Raw: "",
+			},
+			Categories: []int{j.qaTotalPage.CatId},
+			Format:     wordpress.PostFormatStandard,
+			Type:       wordpress.PostTypePost,
+			Status:     wordpress.PostStatusPublish,
+			Slug:       slugName,
+		})
+		if err != nil {
+			i := strings.Index(string(respBody), `name="loginform"`)
+			if i > -1 {
+				check = true
+			} else {
+				task.SetError("Не получилось разместить статью на сайте. " + err.Error())
+				task.SetLog(string(respBody))
+				j.Cancel()
+				return false, "Timeout"
+			}
+		} else if post != nil && post.ID != 0 {
+			task.SetLog("Статья размещена на сайте. ID: " + strconv.Itoa(post.ID))
 		}
+	}
 
-		// Отправляем заметку на сайт
-		//postId := wp.NewPost(qaTotalPage.Title, j.qaTotalPage.Content, qaTotalPage.CatId, qaTotalPage.PhotoId)
-		//var fault bool
-		//if postId > 0 {
-		//	post := wp.GetPost(postId)
-		//	if post.Id > 0 {
-		//		jsonMarking, _ := json.Marshal(microMarking)
-		//		j.qaTotalPage.Content += `<script type="application/ld+json">`
-		//		j.qaTotalPage.Content += strings.ReplaceAll(string(jsonMarking), "{{link}}", post.Link)
-		//		j.qaTotalPage.Content += `</script>`
-		//
-		//		wp.EditPost(postId, qaTotalPage.Title, j.qaTotalPage.Content)
-		//	}else{
-		//		fault = true
-		//	}
-		//}else{
-		//	fault = true
-		//}
+	if check {
+		task.SetLog("Статья размещена на сайте")
+	}
+
+	// Отправляем заметку на сайт
+	//postId := wp.NewPost(qaTotalPage.Title, j.qaTotalPage.Content, qaTotalPage.CatId, qaTotalPage.PhotoId)
+	//var fault bool
+	//if postId > 0 {
+	//	post := wp.GetPost(postId)
+	//	if post.Id > 0 {
+	//		jsonMarking, _ := json.Marshal(microMarking)
+	//		j.qaTotalPage.Content += `<script type="application/ld+json">`
+	//		j.qaTotalPage.Content += strings.ReplaceAll(string(jsonMarking), "{{link}}", post.Link)
+	//		j.qaTotalPage.Content += `</script>`
+	//
+	//		wp.EditPost(postId, qaTotalPage.Title, j.qaTotalPage.Content)
+	//	}else{
+	//		fault = true
+	//	}
+	//}else{
+	//	fault = true
+	//}
 
 	//}else{
 	//	task.SetLog(`Данные сохранены в "Search for"`)
@@ -968,12 +964,14 @@ func (j *JobHandler) RedirectParsing(stats *QaStats) map[string]QaSetting {
 			return settings
 		}
 
-		if i == 0{
+		if i == 0 {
 			table := doc.Find("table")
+			fmt.Println(table.First().Html())
 			if table.Length() > 0 {
 				tableHtml, _ := table.First().Html()
 				j.qaTotalPage.Content += tableHtml
 			}
+			fmt.Println(j.qaTotalPage.Content)
 		}
 
 		var lastQuestion string
@@ -991,13 +989,13 @@ func (j *JobHandler) RedirectParsing(stats *QaStats) map[string]QaSetting {
 			if date == "" {
 				date = s.Find(".Od5Jsd").Text()
 			}
-			text := strings.Replace(s.Find(".mod").Text(), date, "", -1)
-			txtTtml, _ := s.Find(".mod").Html()
+			text := strings.Replace(s.Find(".hgKElc").Text(), date, "", -1)
+			txtTtml, _ := s.Find(".hgKElc").Html()
 
 			if j.task.ParseDoubles > 0 || !MYSQL.GetResultByQAndA(question, text).Id.Valid {
 				// Берём уникальный идентификатор для вопроса
 				stats.All++
-				ved, _ := s.Attr("data-ved")
+				ved, _ := s.Find(".SVyP1c").Attr("data-lk")
 				if question != "" {
 					qa := QaSetting{}
 					qa.Question = question
@@ -1016,7 +1014,7 @@ func (j *JobHandler) RedirectParsing(stats *QaStats) map[string]QaSetting {
 
 					if strings.Contains(txtTtml, "youtube.com/watch") || strings.Contains(txtTtml, "Suggested clip") {
 						stats.Yt++
-					}else{
+					} else {
 						stats.S++
 						settings[ved] = qa
 					}
@@ -1035,7 +1033,7 @@ func (j *JobHandler) RedirectParsing(stats *QaStats) map[string]QaSetting {
 				log.Println("JobHandler.RedirectParsing.HasError", err)
 				return settings
 			}
-		}else{
+		} else {
 			break
 		}
 	}
@@ -1043,8 +1041,8 @@ func (j *JobHandler) RedirectParsing(stats *QaStats) map[string]QaSetting {
 	return settings
 }
 
-func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
-	var paaHtml string
+func (j *JobHandler) ClickParsing(stats *QaStats, isStart bool) map[string]QaSetting {
+	// var paaHtml string
 	settings := map[string]QaSetting{}
 
 	if j.CheckFinished() {
@@ -1060,21 +1058,36 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 	}
 
 	// Вытягиваем html код PAA для парсинга вопросов
-	if err := chromedp.Run(j.Browser.ctx,
-		j.Browser.runWithTimeOut(10, false, chromedp.Tasks{
-			chromedp.OuterHTML(`[jscontroller="ILbBec"]`, &paaHtml, chromedp.ByQuery),
-		}),
-	); err != nil {
-		log.Println("JobHandler.ClickParsing.HasError", err)
+	// if err := chromedp.Run(j.Browser.ctx,
+	// 	j.Browser.runWithTimeOut(10, false, chromedp.Tasks{
+	// 		chromedp.OuterHTML(`[jscontroller="ILbBec"]`, &paaHtml, chromedp.ByQuery),
+	// 	}),
+	// ); err != nil {
+	// 	log.Println("JobHandler.ClickParsing.HasError", err)
+	// 	return settings
+	// }
+
+	// Загружаем HTML документ в GoQuery пакет который организует облегчённую работу с HTML селекторами
+	// paaReader := strings.NewReader(paaHtml)
+	// doc, err := goquery.NewDocumentFromReader(paaReader)
+	// if err != nil {
+	// 	log.Println("JobHandler.ClickParsing.2.HasError", err)
+	// 	return settings
+	// }
+
+	// Вытягиваем html код PAA для парсинга вопросов
+	doc := j.GetSearchSelector()
+	if doc == nil {
 		return settings
 	}
 
-	// Загружаем HTML документ в GoQuery пакет который организует облегчённую работу с HTML селекторами
-	paaReader := strings.NewReader(paaHtml)
-	doc, err := goquery.NewDocumentFromReader(paaReader)
-	if err != nil {
-		log.Println("JobHandler.ClickParsing.2.HasError", err)
-		return settings
+	if isStart {
+		table := doc.Find("table")
+		fmt.Println(table.First().Html())
+		if table.Length() > 0 {
+			tableHtml, _ := table.First().Html()
+			j.qaTotalPage.Content += `<div style="margin: 10px 0 20px;"><table>` + tableHtml + `</table></div><br>\n`
+		}
 	}
 
 	fmt.Println("FAST_PARSING", j.config.GetExtra().FastParsing)
@@ -1090,27 +1103,28 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 		//iDjcJe IX9Lgd wwB5gf
 		//iDjcJe IX9Lgd wwB5gf
 		question := s.Find(".wwB5gf").Text()
-		link, _ := s.Find(".g a").Attr("href")
+		link, _ := s.Find(".g .LC20lb").Attr("href")
 		//isExpanded :=  s.Find("[style=\"opacity: 0.001;\"]").Length() > 0
 
 		// Ищем дату в блоке, она может быть или в div (если вне текста) или в span (если внутри текста)
 		date := s.Find(".kX21rb").Text()
-
-		text := strings.Replace(s.Find(".LGOjhe").Text(), date, "", -1)
-
-		txtHtml, _ := s.Find(".LGOjhe").Html()
+		if date == "" {
+			date = s.Find(".Od5Jsd").Text()
+		}
+		text := strings.Replace(s.Find(".hgKElc").Text(), date, "", -1)
+		txtHtml, _ := s.Find(".hgKElc").Html()
 
 		if j.task.ParseDoubles > 0 || !MYSQL.GetResultByQAndA(question, text).Id.Valid {
 			// Берём уникальный идентификатор для вопроса
 			stats.All++
-			ved, _ := s.Find(`[jsname="F79BRe"]`).Attr("data-lk")
+			ved, _ := s.Find(`.SVyP1c`).Attr("data-lk")
 			if question != "" {
 				qa := QaSetting{}
 				qa.Question = question
 				qa.Text = text
 				qa.Html = txtHtml
 				qa.Link = link
-				qa.LinkTitle = s.Find(".g .LC20lb").Text()
+				qa.LinkTitle = s.Find(".g a").Text()
 				qa.Date = date
 				qa.Length = utf8.RuneCountInString(text) + utf8.RuneCountInString(question)
 				qa.Ved = ved
@@ -1121,19 +1135,19 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 				// Собираем задачи для кликинга по вопросам
 				if _, ok := settings[ved]; !ok {
 					//if isExpanded {
-						fmt.Println("[data-lk=\"" + ved + "\"] .r21Kzd")
-						tasks = append(tasks, chromedp.Tasks{
-							chromedp.Click("[data-lk=\"" + ved + "\"] .r21Kzd"),
-							chromedp.Sleep(time.Second * time.Duration(rand.Intn(5))),
-						})
+					fmt.Println("[data-lk=\"" + ved + "\"] .r21Kzd")
+					tasks = append(tasks, chromedp.Tasks{
+						chromedp.Click("[data-lk=\"" + ved + "\"] .r21Kzd"),
+						chromedp.Sleep(time.Second * time.Duration(rand.Intn(5))),
+					})
 
-						clicked[ved] = true
+					clicked[ved] = true
 					//}
 				}
 
 				if strings.Contains(txtHtml, "youtube.com/watch") || strings.Contains(txtHtml, "Suggested clip") {
 					stats.Yt++
-				}else{
+				} else {
 					stats.S++
 					settings[ved] = qa
 				}
@@ -1174,7 +1188,7 @@ func (j *JobHandler) ClickParsing(stats *QaStats) map[string]QaSetting {
 			}
 
 			// Продолжаем рекурсию
-			return j.ClickParsing(stats)
+			return j.ClickParsing(stats, false)
 		}
 	}
 
@@ -1265,13 +1279,13 @@ func (j *JobHandler) ParsePhotos(keyword string, imageSource string, cache bool)
 				return result
 			}
 		}
-	}else if imageSource == "google" {
+	} else if imageSource == "google" {
 		j.task.SetLog("Парсим фото через Google")
 
 		var (
-			link string
+			link     string
 			sourceId string
-			author string
+			author   string
 		)
 		if err := chromedp.Run(j.Browser.ctx,
 			j.Browser.runWithTimeOut(30, false, chromedp.Tasks{
@@ -1292,7 +1306,7 @@ func (j *JobHandler) ParsePhotos(keyword string, imageSource string, cache bool)
 			reg := regexp.MustCompile(`(.*?),(.*)`)
 			result.Url = reg.ReplaceAllString(link, "$2")
 			result.Encoded = true
-		}else{
+		} else {
 			result.Url = regexp.MustCompile(`^(.*?)\?.*`).ReplaceAllString(link, `$1`)
 		}
 
@@ -1320,7 +1334,7 @@ func (j *JobHandler) ParsePhotos(keyword string, imageSource string, cache bool)
 }
 
 func (j *JobHandler) CheckPaa(html string) bool {
-	return strings.Contains(html,"JolIg") && strings.Contains(html,"related-question-pair")
+	return strings.Contains(html, "JolIg") && strings.Contains(html, "related-question-pair")
 }
 
 func (j *JobHandler) CheckFinished() bool {
@@ -1435,7 +1449,7 @@ func (j *JobHandler) WpUploadFile(url string, postId int, encoded bool) (WpImage
 			return image, err
 		}
 		name = path.Base(url)
-	}else{
+	} else {
 		bytes, err = base64.StdEncoding.DecodeString(url)
 		if err != nil {
 			log.Println("Wordpress.UploadFile.HasError.1", err)
@@ -1470,7 +1484,7 @@ func (j *JobHandler) WpUploadFile(url string, postId int, encoded bool) (WpImage
 	return image, nil
 }
 
-func (j *JobHandler) CatIdByName(slug string) int{
+func (j *JobHandler) CatIdByName(slug string) int {
 	var catId int
 	cats, _, _, _ := j.wp.Categories().List(map[string]string{
 		"slug": slug,

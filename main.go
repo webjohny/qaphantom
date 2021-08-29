@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
 	"io/ioutil"
 	"log"
 	"os"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
 
 	"qaphantom/config"
 )
@@ -24,8 +25,6 @@ func main() {
 	path, _ := os.Getwd()
 
 	CONF.Create(path + "/config.json")
-
-	log.Fatal(readFile())
 
 	// Connect to MysqlDB
 	MYSQL.CreateConnection(CONF.MysqlHost, CONF.MysqlDb, CONF.MysqlLogin, CONF.MysqlPass)
@@ -48,17 +47,18 @@ func main() {
 			//	"html" : "<div>34343a</div>",
 			//	"task_id" : strconv.Itoa(task.Id),
 			//}))
-			job := JobHandler{}
-			job.IsStart = true
-			if job.Browser.Init() {
-				job.Run(2)
-				job.Run(1)
-				//job.Run(1)
-			}
+			// job := JobHandler{}
+			// job.IsStart = true
+			// if job.Browser.Init() {
+			// 	job.Run(2)
+			// 	job.Run(1)
+			// 	//job.Run(1)
+			// }
+			// STREAMS.StartLoop(1, 45, "")
 		}()
 
-		time.Sleep(100)
-	}else if MYSQL.CountWorkingTasks() > 0 {
+		// time.Sleep(100)
+	} else if MYSQL.CountWorkingTasks() > 0 {
 		conf := MYSQL.GetConfig()
 		extra := conf.GetExtra()
 		if extra.CountStreams > 0 {
@@ -72,7 +72,7 @@ func main() {
 	time.Sleep(time.Minute)
 }
 
-func readFile() string{
+func readFile() string {
 	file, err := os.Open("html.txt")
 	if err != nil {
 		log.Fatal(err)
@@ -82,7 +82,6 @@ func readFile() string{
 			log.Fatal(err)
 		}
 	}()
-
 
 	b, err := ioutil.ReadAll(file)
 

@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
+	"strings"
+	"time"
+
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/fetch"
@@ -11,9 +15,6 @@ import (
 	"github.com/chromedp/cdproto/performance"
 	"github.com/chromedp/cdproto/security"
 	"github.com/webjohny/chromedp"
-	"log"
-	"strings"
-	"time"
 )
 
 type Browser struct {
@@ -22,14 +23,25 @@ type Browser struct {
 	BrowserContextID cdp.BrowserContextID
 
 	cancelBrowser context.CancelFunc
-	cancelTask context.CancelFunc
+	cancelTask    context.CancelFunc
 
 	Proxy *Proxy
-	ctx context.Context
+	ctx   context.Context
 
 	isOpened bool
 	streamId int
-	limit int64
+	limit    int64
+}
+
+func (b *Browser) startProxy() bool {
+	b.Proxy = NewProxy()
+	// Подключаемся к прокси
+	if b.Proxy == nil {
+		return false
+	}
+
+	b.Proxy.setTimeout(b.streamId, 5)
+	return true
 }
 
 func (b *Browser) Init() bool {
@@ -43,42 +55,22 @@ func (b *Browser) Init() bool {
 
 	if b.Proxy == nil || b.Proxy.Host == "" {
 		fmt.Println("CHECK PROXY")
-		b.Proxy = NewProxy()
-		// Подключаемся к прокси
-		if b.Proxy == nil {
+		if !b.startProxy() {
 			return false
 		}
 
-		b.Proxy.setTimeout(b.streamId, 5)
-
-		if !b.checkProxy(b.Proxy) {
+		if !b.checkProxy() {
 			return false
 		}
 	}
 
 	if b.ctx == nil {
 		fmt.Println("NEW INSTANCE")
-
-		options := b.setOpts(b.Proxy)
-
-		if CONF.Env == "local" {
-			options = append(options, chromedp.Flag("headless", false))
+		if !b.startProxy() {
+			return false
 		}
-		// Запускаем контекст браузера
-		allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), options...)
-		b.cancelBrowser = cancel
 
-		// Устанавливаем собственный logger
-		//, chromedp.WithDebugf(log.Printf)
-		taskCtx, cancel := chromedp.NewContext(allocCtx)
-		b.cancelTask = cancel
-		b.ctx = taskCtx
-
-		if err := chromedp.Run(taskCtx,
-			chromedp.Sleep(time.Second),
-			b.setProxyToContext(b.Proxy),
-		); err != nil {
-			log.Println("Browser.Init.HasError", err)
+		if !b.checkProxy() {
 			return false
 		}
 	}
@@ -89,7 +81,9 @@ func (b *Browser) Init() bool {
 	return true
 }
 
-func (b *Browser) checkProxy(proxy *Proxy) bool {
+func (b *Browser) checkProxy() bool {
+	proxy := b.Proxy
+
 	if proxy == nil {
 		return false
 	}
@@ -121,14 +115,13 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 
 	var searchHtml string
 
-	fmt.Println(UTILS.ArrayRand(keyWords))
 	if err := chromedp.Run(taskCtx,
 		b.setProxyToContext(proxy),
 		b.runWithTimeOut(10, false, chromedp.Tasks{
 			// Устанавливаем страницу для парсинга
 			chromedp.Navigate("https://www.google.com/search?q=" + UTILS.ArrayRand(keyWords)),
 			//chromedp.Navigate("https://deelay.me/23545/google.com"),
-			chromedp.WaitVisible("body",chromedp.ByQuery),
+			chromedp.WaitVisible("body", chromedp.ByQuery),
 			chromedp.OuterHTML("body", &searchHtml, chromedp.ByQuery),
 		}),
 	); err != nil {
@@ -143,13 +136,11 @@ func (b *Browser) checkProxy(proxy *Proxy) bool {
 	return false
 }
 
-
 func (b *Browser) CheckCaptcha(html string) bool {
-	return strings.Contains(html,"g-recaptcha") && strings.Contains(html,"data-sitekey")
+	return strings.Contains(html, "g-recaptcha") && strings.Contains(html, "data-sitekey")
 }
 
 func (b *Browser) setProxyToContext(proxy *Proxy) chromedp.Tasks {
-	fmt.Print(proxy.Login, proxy.Password)
 	return chromedp.Tasks{
 		network.Enable(),
 		performance.Enable(),
@@ -185,7 +176,7 @@ func (b *Browser) setOpts(proxy *Proxy) []chromedp.ExecAllocatorOption {
 func (b *Browser) runWithTimeOut(timeout time.Duration, isStrict bool, tasks chromedp.Tasks) chromedp.ActionFunc {
 	return func(ctx context.Context) error {
 		var check bool
-		time.AfterFunc(timeout * time.Second, func(){
+		time.AfterFunc(timeout*time.Second, func() {
 			if !check {
 				if isStrict {
 					b.cancelTask()
@@ -201,7 +192,7 @@ func (b *Browser) runWithTimeOut(timeout time.Duration, isStrict bool, tasks chr
 				fmt.Println("ERR.Browser.runWithTimeOut.1", err)
 				b.cancelTask()
 				return err
-			}else{
+			} else {
 				time.Sleep(2 * time.Second)
 			}
 		}
